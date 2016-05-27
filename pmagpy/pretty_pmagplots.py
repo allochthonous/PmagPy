@@ -61,9 +61,11 @@ def subplot_net(title="", quadrant='all'):
     ax.set_title(title)
     ax.set(aspect=1)
 
-def plot_AMS(sdata,pointsize=50,incolor='N'):
+def plot_AMS(sdata,pointsize=50,incolor='N',errors='None'):
     """
-    adapted from pmagplotlib.plotANIS 
+    adapted from pmagplotlib.plotANIS
+    set errors to 'h' for hext ellipses, 'b' for bootstrap, 'p' for parametric bootstrap
+    bootstrap trials currently hard-coded as 1000
     """
     subplot_net() #set up stereonet
     if incolor=='N': colours=['0.4','0.6','0.5'] #specify greyscale colours
@@ -80,15 +82,30 @@ def plot_AMS(sdata,pointsize=50,incolor='N'):
     mtau,mV=pmag.doseigs(avs)
     Vs.append(mV)
     plotEVEC(Vs,pointsize*4,['w','w','w'], 'black')
-    #plot confidence limits (currently Hext only)
+    #plot confidence limits
     hpars=pmag.dohext(nf,sigma,avs)
-    ellpars=[hpars["v1_dec"],hpars["v1_inc"],hpars["e12"],hpars["v2_dec"],hpars["v2_inc"],hpars["e13"],hpars["v3_dec"],hpars["v3_inc"]]
-    plotELL(ellpars,'black',1,1)
-    ellpars=[hpars["v2_dec"],hpars["v2_inc"],hpars["e23"],hpars["v3_dec"],hpars["v3_inc"],hpars["e12"],hpars["v1_dec"],hpars["v1_inc"]]
-    plotELL(ellpars,'black',1,1)
-    ellpars=[hpars["v3_dec"],hpars["v3_inc"],hpars["e13"],hpars["v1_dec"],hpars["v1_inc"],hpars["e23"],hpars["v2_dec"],hpars["v2_inc"]]
-    plotELL(ellpars,'black',1,1)
-
+    if errors=='h':
+        ellpars=[hpars["v1_dec"],hpars["v1_inc"],hpars["e12"],hpars["v2_dec"],hpars["v2_inc"],hpars["e13"],hpars["v3_dec"],hpars["v3_inc"]]
+        plotELL(ellpars,'black',1,1)
+        ellpars=[hpars["v2_dec"],hpars["v2_inc"],hpars["e23"],hpars["v3_dec"],hpars["v3_inc"],hpars["e12"],hpars["v1_dec"],hpars["v1_inc"]]
+        plotELL(ellpars,'black',1,1)
+        ellpars=[hpars["v3_dec"],hpars["v3_inc"],hpars["e13"],hpars["v1_dec"],hpars["v1_inc"],hpars["e23"],hpars["v2_dec"],hpars["v2_inc"]]
+        plotELL(ellpars,'black',1,1)
+    elif errors=='b' or errors=='p':
+        if errors=='p': ipar=1
+        else: ipar=0
+        Tmean,Vmean,Taus,BVs=pmag.s_boot(sdata,ipar,1000) # get eigenvectors of mean tensor
+        bpars=pmag.sbootpars(Taus,BVs)
+        bpars['t1']=hpars['t1']
+        bpars['t2']=hpars['t2']
+        bpars['t3']=hpars['t3']
+        ellpars=[bpars["v1_dec"],bpars["v1_inc"],bpars["v1_zeta"],bpars["v1_zeta_dec"],bpars["v1_zeta_inc"],bpars["v1_eta"],bpars["v1_eta_dec"],bpars["v1_eta_inc"]]
+        plotELL(ellpars,'black',1,1)
+        ellpars=[bpars["v2_dec"],bpars["v2_inc"],bpars["v2_zeta"],bpars["v2_zeta_dec"],bpars["v2_zeta_inc"],bpars["v2_eta"],bpars["v2_eta_dec"],bpars["v2_eta_inc"]]
+        plotELL(ellpars,'black',1,1)
+        ellpars=[bpars["v3_dec"],bpars["v3_inc"],bpars["v3_zeta"],bpars["v3_zeta_dec"],bpars["v3_zeta_inc"],bpars["v3_eta"],bpars["v3_eta_dec"],bpars["v3_eta_inc"]]
+        plotELL(ellpars,'black',1,1) 
+           
 def plotEVEC(Vs,symsize=40,colours=['lightcoral','lightskyblue','lightgreen'],symboledgecolor='none'):
     """
     plots eigenvector directions of S vectors
@@ -102,7 +119,7 @@ def plotEVEC(Vs,symsize=40,colours=['lightcoral','lightskyblue','lightgreen'],sy
             XY=pmag.dimap(Vdirs[VEC][0],Vdirs[VEC][1])
             X.append(XY[0])
             Y.append(XY[1])
-        plt.scatter(X,Y,s=symsize,marker=symb[VEC],c=colours[VEC],edgecolors=symboledgecolor, zorder=4)
+        plt.scatter(X,Y,s=symsize,marker=symb[VEC],c=colours[VEC],edgecolors=symboledgecolor, zorder=6)
         
 def plotELL(pars,col,lower,plot):
     """
