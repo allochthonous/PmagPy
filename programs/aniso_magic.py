@@ -319,7 +319,7 @@ def main():
               if ipar==1:BootRec["magic_method_codes"]='LP-AN:AE-H:AE-BS-P' # parametric bootstrap
               if verbose:
                   print "Boostrap Statistics: "
-                  print " tau_i, V_i_D, V_i_I, V_i_zeta, V_i_zeta_D, V_i_zeta_I, V_i_eta, V_i_eta_D, V_i_eta_I"
+                  print " tau_i, V_i_D, V_i_I, V_i_eta, V_i_eta_D, V_i_eta_I, V_i_zeta, V_i_zeta_D, V_i_zeta_I"
                   print BootRec["anisotropy_t1"], BootRec["anisotropy_v1_dec"], BootRec["anisotropy_v1_inc"], BootRec["anisotropy_v1_eta_semi_angle"], BootRec["anisotropy_v1_eta_dec"], BootRec["anisotropy_v1_eta_inc"], BootRec["anisotropy_v1_zeta_semi_angle"], BootRec["anisotropy_v1_zeta_dec"], BootRec["anisotropy_v1_zeta_inc"]
                   print BootRec["anisotropy_t2"],BootRec["anisotropy_v2_dec"], BootRec["anisotropy_v2_inc"], BootRec["anisotropy_v2_eta_semi_angle"], BootRec["anisotropy_v2_eta_dec"], BootRec["anisotropy_v2_eta_inc"], BootRec["anisotropy_v2_zeta_semi_angle"], BootRec["anisotropy_v2_zeta_dec"], BootRec["anisotropy_v2_zeta_inc"]
                   print BootRec["anisotropy_t3"], BootRec["anisotropy_v3_dec"], BootRec["anisotropy_v3_inc"], BootRec["anisotropy_v3_eta_semi_angle"], BootRec["anisotropy_v3_eta_dec"], BootRec["anisotropy_v3_eta_inc"], BootRec["anisotropy_v3_zeta_semi_angle"], BootRec["anisotropy_v3_zeta_dec"], BootRec["anisotropy_v3_zeta_inc"]

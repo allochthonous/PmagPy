@@ -99,11 +99,12 @@ def plot_AMS(sdata,pointsize=50,incolor='N',errors='None'):
         bpars['t1']=hpars['t1']
         bpars['t2']=hpars['t2']
         bpars['t3']=hpars['t3']
-        ellpars=[bpars["v1_dec"],bpars["v1_inc"],bpars["v1_zeta"],bpars["v1_zeta_dec"],bpars["v1_zeta_inc"],bpars["v1_eta"],bpars["v1_eta_dec"],bpars["v1_eta_inc"]]
+        #have to pair zeta value with eta dec/inc, and vice-versa, to align error ellipses correctly.
+        ellpars=[bpars["v1_dec"],bpars["v1_inc"],bpars["v1_eta"],bpars["v1_eta_dec"],bpars["v1_eta_inc"],bpars["v1_zeta"],bpars["v1_zeta_dec"],bpars["v1_zeta_inc"]]
         plotELL(ellpars,'black',1,1)
-        ellpars=[bpars["v2_dec"],bpars["v2_inc"],bpars["v2_zeta"],bpars["v2_zeta_dec"],bpars["v2_zeta_inc"],bpars["v2_eta"],bpars["v2_eta_dec"],bpars["v2_eta_inc"]]
+        ellpars=[bpars["v2_dec"],bpars["v2_inc"],bpars["v2_eta"],bpars["v2_eta_dec"],bpars["v2_eta_inc"],bpars["v2_zeta"],bpars["v2_zeta_dec"],bpars["v2_zeta_inc"]]
         plotELL(ellpars,'black',1,1)
-        ellpars=[bpars["v3_dec"],bpars["v3_inc"],bpars["v3_zeta"],bpars["v3_zeta_dec"],bpars["v3_zeta_inc"],bpars["v3_eta"],bpars["v3_eta_dec"],bpars["v3_eta_inc"]]
+        ellpars=[bpars["v3_dec"],bpars["v3_inc"],bpars["v3_eta"],bpars["v3_eta_dec"],bpars["v3_eta_inc"],bpars["v3_zeta"],bpars["v3_zeta_dec"],bpars["v3_zeta_inc"]]
         plotELL(ellpars,'black',1,1) 
            
 def plotEVEC(Vs,symsize=40,colours=['lightcoral','lightskyblue','lightgreen'],symboledgecolor='none'):
