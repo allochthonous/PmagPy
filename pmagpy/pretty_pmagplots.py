@@ -81,7 +81,7 @@ def plot_AMS(sdata,pointsize=50,incolor='N',errors='None'):
     Vs=[]
     mtau,mV=pmag.doseigs(avs)
     Vs.append(mV)
-    plotEVEC(Vs,pointsize*4,['w','w','w'], 'black')
+    plotEVEC(Vs,pointsize*4,['w','w','w'], 'black',7)
     #plot confidence limits
     hpars=pmag.dohext(nf,sigma,avs)
     if errors=='h':
@@ -107,7 +107,7 @@ def plot_AMS(sdata,pointsize=50,incolor='N',errors='None'):
         ellpars=[bpars["v3_dec"],bpars["v3_inc"],bpars["v3_eta"],bpars["v3_eta_dec"],bpars["v3_eta_inc"],bpars["v3_zeta"],bpars["v3_zeta_dec"],bpars["v3_zeta_inc"]]
         plotELL(ellpars,'black',1,1) 
            
-def plotEVEC(Vs,symsize=40,colours=['lightcoral','lightskyblue','lightgreen'],symboledgecolor='none'):
+def plotEVEC(Vs,symsize=40,colours=['lightcoral','lightskyblue','lightgreen'],symboledgecolor='none',level=5):
     """
     plots eigenvector directions of S vectors
     adapted from pmagplotlib.plotEVEC
@@ -120,7 +120,7 @@ def plotEVEC(Vs,symsize=40,colours=['lightcoral','lightskyblue','lightgreen'],sy
             XY=pmag.dimap(Vdirs[VEC][0],Vdirs[VEC][1])
             X.append(XY[0])
             Y.append(XY[1])
-        plt.scatter(X,Y,s=symsize,marker=symb[VEC],c=colours[VEC],edgecolors=symboledgecolor, zorder=6)
+        plt.scatter(X,Y,s=symsize,marker=symb[VEC],c=colours[VEC],edgecolors=symboledgecolor, zorder=level)
         
 def plotELL(pars,col,lower,plot):
     """
@@ -179,13 +179,16 @@ def plotELL(pars,col,lower,plot):
 #            for i in range(3): elli[i]=-elli[i]
             X_up.append(elli[1]*R)
             Y_up.append(elli[0]*R)
+            # Adding None values stops plotting of an additional straight line 
+            # between the points where the ellipse crosses the edge of the stereonet
+            X_ell.append(None)
+            Y_ell.append(None)            
         else:
             X_ell.append(elli[1]*R)
             Y_ell.append(elli[0]*R)
     if plot==1:
-        if X_ell!=[]:plt.plot(X_ell,Y_ell,col, linewidth=2, zorder=5)
-        #omitting this because it does strange things to ellipses that cross zero inclination
-        #if X_up!=[]:plt.plot(X_up,Y_up,col)
+        if X_ell!=[]:plt.plot(X_ell,Y_ell,color=col, linewidth=2, zorder=6)
+        if X_up!=[]:plt.plot(X_up,Y_up,color=col,linewidth=2,linestyle=':')
     else:
         return PTS
 

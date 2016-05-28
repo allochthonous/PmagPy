@@ -1367,6 +1367,10 @@ def plotELL(fignum,pars,col,lower,plot):
 #            for i in range(3): elli[i]=-elli[i]
             X_up.append(elli[1]*R)
             Y_up.append(elli[0]*R)
+            # Adding None values stops plotting of an additional straight line 
+            # between the points where the ellipse crosses the edge of the stereonet
+            X_ell.append(None)
+            Y_ell.append(None)              
         else:
             X_ell.append(elli[1]*R)
             Y_ell.append(elli[0]*R)
