@@ -1,6 +1,7 @@
 import pmag
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 def subplot_net(title="", quadrant='all'):
     ax=plt.gca()
@@ -60,6 +61,24 @@ def subplot_net(title="", quadrant='all'):
         ax.plot(Xtick,Ytick,color='grey', linewidth=1.5,zorder=1) 
     ax.set_title(title)
     ax.set(aspect=1)
+
+def plot_Jel(sdata,plotsymbol='o',symbolsize=20,symbolcolor='grey',symbolborder=None, z=4):
+    """
+    takes sdata, calculates Jelinek P' and T parameters, and plots 
+    """
+    #this may be a bit too specialised to really be worth it. We'll see
+    JelPars=pd.DataFrame([pmag.s_JelPT(data) for data in sdata], columns=['Pdash','T'])
+    ax=plt.gca()
+    ax.xaxis.set_ticks_position('bottom')
+    ax.yaxis.set_ticks_position('left')
+    plt.scatter(JelPars.Pdash,JelPars['T'], marker=plotsymbol, color=symbolcolor,edgecolor=symbolborder, s=symbolsize, zorder=z)
+    plt.axhline(0, color='grey',zorder=0)
+    plt.xlim(1,1.2)
+    plt.ylim(-1,1) 
+    plt.xlabel('P \'', fontsize=14)
+    plt.ylabel('T', fontsize=14)
+    return JelPars
+
 
 def plot_AMS(sdata,pointsize=50,errors='None',bedding=[],incolor='N',):
     """

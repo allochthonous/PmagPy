@@ -3914,6 +3914,26 @@ def doeigs_s(tau,Vdirs):
     return a2s(chi)
 #
 #
+
+def s_JelPT(sdata):
+    """
+    take anisotropy s data and calculate Jelinek (1981) corrected anisotropy P' 
+    and shape T parameters Output: [P',T].
+    """
+    ks,dirs=doseigs(sdata)
+    return eigs_JelPT(ks)
+        
+def eigs_JelPT(ks):
+    """
+    take anisotropy eigenvalues [k1,k2,k3] and calculate Jelinek (1981) 
+    corrected anisotropy P' and shape T parameters Output: [P',T].
+    """
+    eta=[numpy.log(ks[0]),numpy.log(ks[1]),numpy.log(ks[2])]
+    etabar=sum(eta)/3.
+    P=numpy.exp(numpy.sqrt(2*((eta[0]-etabar)**2+(eta[1]-etabar)**2+(eta[2]-etabar)**2)))
+    T=2*(eta[1]-eta[2])/(eta[0]-eta[2])-1
+    return(P,T)   
+
 def fcalc(col,row):
     """
   looks up f from ftables F(row,col), where row is number of degrees of freedom - this is 95% confidence (p=0.05)
