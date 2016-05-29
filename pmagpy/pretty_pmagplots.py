@@ -61,15 +61,27 @@ def subplot_net(title="", quadrant='all'):
     ax.set_title(title)
     ax.set(aspect=1)
 
-def plot_AMS(sdata,pointsize=50,incolor='N',errors='None'):
+def plot_AMS(sdata,pointsize=50,errors='None',bedding=[],incolor='N',):
     """
     adapted from pmagplotlib.plotANIS
     set errors to 'h' for hext ellipses, 'b' for bootstrap, 'p' for parametric bootstrap
     bootstrap trials currently hard-coded as 1000
+    for bedding, give as [strike,dip] ;
     """
     subplot_net() #set up stereonet
     if incolor=='N': colours=['0.4','0.6','0.5'] #specify greyscale colours
-    else: colours=['lightcoral','lightskyblue','lightgreen'] 
+    else: colours=['lightcoral','lightskyblue','lightgreen']
+    #if bedding plot bedding plane
+    if bedding !=[]:
+        # hard-coded version of pmag.plotC
+        D_c,I_c=pmag.circ(bedding[0]-90.,90.-bedding[1],90.)
+        X_c_d,Y_c_d=[],[]
+        for k in range(len(D_c)):
+            XY=pmag.dimap(D_c[k],I_c[k])
+            if I_c[k]>0:
+                X_c_d.append(XY[0])
+                Y_c_d.append(XY[1])
+        plt.plot(X_c_d,Y_c_d,color='grey',dashes=[10,2],linewidth=3,zorder=1)
     Vs=[]
     #plot individual sample data
     for s in sdata:
