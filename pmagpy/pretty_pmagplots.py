@@ -33,25 +33,25 @@ def subplot_net(title="", quadrant='all'):
         XY=pmag.dimap(0.,I)
         Xsym.append(XY[0])
         Ysym.append(XY[1])
-    ax.scatter(Xsym,Ysym, color='grey', marker='+', s=30)
+    ax.scatter(Xsym,Ysym, color='lightgrey', marker='+', s=20)
     Xsym,Ysym=[],[]
     for I in range(10,90,10):
         XY=pmag.dimap(90.,I)
         Xsym.append(XY[0])
         Ysym.append(XY[1])
-    ax.scatter(Xsym,Ysym,color='grey', marker='+', s=30)
+    ax.scatter(Xsym,Ysym,color='lightgrey', marker='+', s=20)
     Xsym,Ysym=[],[]
     for I in range(10,90,10):
         XY=pmag.dimap(180.,I)
         Xsym.append(XY[0])
         Ysym.append(XY[1])
-    ax.scatter(Xsym,Ysym,color='grey', marker='+', s=30)
+    ax.scatter(Xsym,Ysym,color='lightgrey', marker='+', s=20)
     Xsym,Ysym=[],[]
     for I in range(10,90,10):
         XY=pmag.dimap(270.,I)
         Xsym.append(XY[0])
         Ysym.append(XY[1])
-    ax.scatter(Xsym,Ysym,color='grey', marker='+', s=30)
+    ax.scatter(Xsym,Ysym,color='lightgrey', marker='+', s=20)
     for D in range(0,360,10):
         Xtick,Ytick=[],[]
         for I in range(4):
