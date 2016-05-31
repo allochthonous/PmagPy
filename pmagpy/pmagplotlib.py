@@ -2002,7 +2002,7 @@ def plotANIS(ANIS,Ss,iboot,ihext,ivec,ipar,title,plt,comp,vec,Dir,nb):
     if iboot==1:
         print 'Doing bootstrap - be patient'
         Tmean,Vmean,Taus,BVs=pmag.s_boot(Ss,ipar,nb) # get eigenvectors of mean tensor
-        bpars=pmag.sbootpars(Taus,BVs)
+        bpars=pmag.sbootpars(Taus,BVs,Vmean)
         bpars['t1']=hpars['t1']
         bpars['t2']=hpars['t2']
         bpars['t3']=hpars['t3']

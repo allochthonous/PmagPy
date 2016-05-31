@@ -4534,7 +4534,7 @@ def apseudo(Ss,ipar,sigma):
             BSs.append(numpy.dot(B,Pars[k]))
     return numpy.array(BSs)
 #
-def sbootpars(Taus,Vs):
+def sbootpars(Taus,Vs,Vmean):
     """
      get bootstrap parameters for s data
     """
@@ -4543,6 +4543,7 @@ def sbootpars(Taus,Vs):
     V1s,V2s,V3s=[],[],[]
     nb=len(Taus)
     bpars={}
+    dipolar_cutoff=40.
     for k in range(nb):
         Tau1s.append(Taus[k][0])
         Tau2s.append(Taus[k][1])
@@ -4556,7 +4557,15 @@ def sbootpars(Taus,Vs):
     bpars["t2_sigma"]=sig
     x,sig=gausspars(Tau3s)
     bpars["t3_sigma"]=sig
-    kpars=dokent(V1s,len(V1s))
+    # note that the bootstrap eigenvectors can be dipolar, which the Kent distribution 
+    # can't handle and produces weird error ellipses. The undipolarise() function 
+    # creates a unipolar distribution, allowing a relatistic Kent ellipse to be derived.
+    # HOWEVER we don't want to do this for high inclination distributions
+    # where data is monopolar but declinations can vary by a lot.
+    if Vmean[0][1]>dipolar_cutoff:
+        kpars=dokent(V1s,len(V1s))
+    else:
+        kpars=dokent(undipolarise(V1s,Vmean[0][0]),len(V1s))
     bpars["v1_dec"]=kpars["dec"]
     bpars["v1_inc"]=kpars["inc"]
     bpars["v1_zeta"]=kpars["Zeta"]*numpy.sqrt(nb)
@@ -4565,7 +4574,10 @@ def sbootpars(Taus,Vs):
     bpars["v1_zeta_inc"]=kpars["Zinc"]
     bpars["v1_eta_dec"]=kpars["Edec"]
     bpars["v1_eta_inc"]=kpars["Einc"]
-    kpars=dokent(V2s,len(V2s))
+    if Vmean[1][1]>dipolar_cutoff:
+        kpars=dokent(V2s,len(V2s))
+    else: 
+        kpars=dokent(undipolarise(V2s,Vmean[1][0]),len(V2s))
     bpars["v2_dec"]=kpars["dec"]
     bpars["v2_inc"]=kpars["inc"]
     bpars["v2_zeta"]=kpars["Zeta"]*numpy.sqrt(nb)
@@ -4574,7 +4586,10 @@ def sbootpars(Taus,Vs):
     bpars["v2_zeta_inc"]=kpars["Zinc"]
     bpars["v2_eta_dec"]=kpars["Edec"]
     bpars["v2_eta_inc"]=kpars["Einc"]
-    kpars=dokent(V3s,len(V3s))
+    if Vmean[2][1]>dipolar_cutoff:
+        kpars=dokent(V3s,len(V3s))
+    else:
+        kpars=dokent(undipolarise(V3s,Vmean[2][0]),len(V3s))
     bpars["v3_dec"]=kpars["dec"]
     bpars["v3_inc"]=kpars["inc"]
     bpars["v3_zeta"]=kpars["Zeta"]*numpy.sqrt(nb)
@@ -4608,6 +4623,24 @@ def s_boot(Ss,ipar,nb):
         Taus.append(tau)
         Vs.append(Vdirs)
     return Tmean,Vmean,Taus,Vs
+
+def undipolarise(dirs,target=None):
+    """
+    Takes dipolar data (array of [D,I]) and makes it unipolar by inverting
+    the population antipodal to the specified target direction. If no target
+    given, it uses the declination of the first direction in the dataset 
+    (which is not stable for a very scattered dataset)
+    """
+    if target==None:
+        target=dirs[0][0]
+    correcteddirs=[]
+    for dir in dirs:
+        if dir[0]-target>90.:
+            correcteddirs.append([dir[0]-180,-dir[1]])
+        elif dir[0]-target<-90.:
+            correcteddirs.append([dir[0]+180,-dir[1]])
+        else: correcteddirs.append(dir)
+    return correcteddirs
 
 #
 def designAARM(npos):

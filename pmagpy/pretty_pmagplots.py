@@ -11,9 +11,9 @@ def subplot_net(title="", quadrant='all'):
     draws circle and tick marks for equal area projection
     can zoom in on quadrant/half of stereonet using quadrant='NE','E','S' etc.
     """
-    quadrants= {'all': [-1.05,1.05,-1.05,1.05],'N': [-1.05,1.05,-0.1,1.05], 'E': [-0.1,1.05,-1.05,1.05], 
-            'S': [-1.05,1.05,-1.05,0.1],'W': [-1.05,0.1,-1.05,1.05], 'NE': [-0.1,1.05,-0.1,1.05],
-            'SE': [-0.1,1.05,-1.05,0.1],'SW': [-1.05,0.1,-1.05,0.1], 'NW': [-0.1,1.05,-1.05,0.1]}
+    quadrants= {'all': [-1.1,1.1,-1.1,1.1],'N': [-1.1,1.1,-0.1,1.1], 'E': [-0.1,1.1,-1.1,1.1], 
+            'S': [-1.1,1.1,-1.1,0.1],'W': [-1.1,0.1,-1.1,1.1], 'NE': [-0.1,1.1,-0.1,1.1],
+            'SE': [-0.1,1.1,-1.1,0.1],'SW': [-1.1,0.1,-1.1,0.1], 'NW': [-0.1,1.1,-1.1,0.1]}
      
     # make the perimeter
     ax.axis("off")
@@ -126,7 +126,10 @@ def plot_AMS(sdata,pointsize=50,errors='None',bedding=[],incolor='N',):
         if errors=='p': ipar=1
         else: ipar=0
         Tmean,Vmean,Taus,BVs=pmag.s_boot(sdata,ipar,1000) # get eigenvectors of mean tensor
-        bpars=pmag.sbootpars(Taus,BVs)
+        # the problem with the bootstrap is that for fabrics where one or more eigenvectors is close to the horizontal,
+        # you end up with dipolar data        
+                        
+        bpars=pmag.sbootpars(Taus,BVs,Vmean)
         bpars['t1']=hpars['t1']
         bpars['t2']=hpars['t2']
         bpars['t3']=hpars['t3']

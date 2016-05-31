@@ -53,7 +53,7 @@ def main():
             s.append(float(rec[i]))
         Ss.append(s)
     Tmean,Vmean,Taus,Vs=pmag.s_boot(Ss,ipar,nb)
-    bpars=pmag.sbootpars(Taus,Vs) # calculate kent parameters for bootstrap
+    bpars=pmag.sbootpars(Taus,Vs,Vmean) # calculate kent parameters for bootstrap
     bpars["v1_dec"]=Vmean[0][0]
     bpars["v1_inc"]=Vmean[0][1]
     bpars["v2_dec"]=Vmean[1][0]
