@@ -4543,7 +4543,7 @@ def sbootpars(Taus,Vs,Vmean):
     V1s,V2s,V3s=[],[],[]
     nb=len(Taus)
     bpars={}
-    dipolar_cutoff=40.
+    dipolar_cutoff=25.
     for k in range(nb):
         Tau1s.append(Taus[k][0])
         Tau2s.append(Taus[k][1])
@@ -4629,18 +4629,17 @@ def undipolarise(dirs,target=None):
     Takes dipolar data (array of [D,I]) and makes it unipolar by inverting
     the population antipodal to the specified target direction. If no target
     given, it uses the declination of the first direction in the dataset 
-    (which is not stable for a very scattered dataset)
+    (which could, for a very scattered dataset, potentially go wrong)
     """
     if target==None:
         target=dirs[0][0]
     correcteddirs=[]
     for dir in dirs:
-        if dir[0]-target>90.:
-            correcteddirs.append([dir[0]-180,-dir[1]])
-        elif dir[0]-target<-90.:
-            correcteddirs.append([dir[0]+180,-dir[1]])
+        if numpy.cos((dir[0]-target)*numpy.pi/180.)<0.:
+           correcteddirs.append([dir[0]-180,-dir[1]]) 
         else: correcteddirs.append(dir)
     return correcteddirs
+
 
 #
 def designAARM(npos):
