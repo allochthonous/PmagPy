@@ -177,8 +177,15 @@ class Demag_GUI(wx.Frame):
                 self.high_level_means[high_level]={}
 
         self.interpretation_editor_open = False
-        self.color_dict = {'green':'g','yellow':'y','maroon':'m','cyan':'c','blue':'b','red':'r','brown':(139./255.,69./255.,19./255.),'orange':(255./255.,127./255.,0./255.),'pink':(255./255.,20./255.,147./255.),'violet':(153./255.,50./255.,204./255.),'grey':(84./255.,84./255.,84./255.),'goldenrod':'goldenrod'}
-        self.colors = ['g','y','m','c','b','r',(139./255.,69./255.,19./255.),(255./255.,127./255.,0./255.),(255./255.,20./255.,147./255.),(153./255.,50./255.,204./255.),(84./255.,84./255.,84./255.), 'goldenrod']
+        self.color_dict = {}
+        self.colors = ['#008000','#FFFF00','#800000','#00FFFF']
+        for name, hexval in matplotlib.colors.cnames.iteritems():
+            if name == 'black' or name == 'blue' or name == 'red': continue
+            elif name == 'green' or name == 'yellow' or name == 'maroon' or name == 'cyan':
+                self.color_dict[name] = hexval
+            else: self.color_dict[name] = hexval; self.colors.append(hexval)
+#        self.color_dict = {'green':'g','yellow':'y','maroon':'m','cyan':'c','blue':'b','red':'r','brown':(139./255.,69./255.,19./255.),'orange':(255./255.,127./255.,0./255.),'pink':(255./255.,20./255.,147./255.),'violet':(153./255.,50./255.,204./255.),'grey':(84./255.,84./255.,84./255.),'goldenrod':'goldenrod'}
+#        self.colors = ['g','y','m','c','b','r',(139./255.,69./255.,19./255.),(255./255.,127./255.,0./255.),(255./255.,20./255.,147./255.),(153./255.,50./255.,204./255.),(84./255.,84./255.,84./255.), 'goldenrod']
         self.all_fits_list = []
         self.current_fit = None
         self.dirtypes = ['DA-DIR','DA-DIR-GEO','DA-DIR-TILT']
@@ -198,8 +205,8 @@ class Demag_GUI(wx.Frame):
         self.locations.sort()                   # get list of sites
 
         self.panel = wx.lib.scrolledpanel.ScrolledPanel(self,-1) # make the Panel
-        self.panel.SetupScrolling()
         self.init_UI()                   # build the main frame
+        self.panel.SetupScrolling()     #endable scrolling
         self.create_menu()                  # create manu bar
 
         # get previous interpretations from pmag tables
@@ -264,6 +271,8 @@ class Demag_GUI(wx.Frame):
         self.toolbar1.zoom()
         self.canvas1.Bind(wx.EVT_RIGHT_DOWN,self.right_click_zijderveld)
         self.canvas1.Bind(wx.EVT_MIDDLE_DOWN,self.home_zijderveld)
+        self.canvas1.Bind(wx.EVT_LEFT_DCLICK,self.on_zijd_select)
+        self.canvas1.Bind(wx.EVT_RIGHT_DCLICK,self.on_zijd_mark)
 
         self.fig2 = Figure((2.5*self.GUI_RESOLUTION, 2.5*self.GUI_RESOLUTION), dpi=self.dpi)
         self.specimen_eqarea_net = self.fig2.add_subplot(111)
@@ -348,7 +357,7 @@ class Demag_GUI(wx.Frame):
         #  select specimen box
     #----------------------------------------------------------------------
 
-        self.box_sizer_select_specimen = wx.StaticBoxSizer( wx.StaticBox( self.panel, wx.ID_ANY), wx.VERTICAL )
+        self.box_sizer_select_specimen = wx.StaticBoxSizer( wx.StaticBox( self.panel, wx.ID_ANY, label="specimen:"), wx.VERTICAL )
 
         # Combo-box with a list of specimen
         self.specimens_box = wx.ComboBox(self.panel, -1, value=self.s, size=(150*self.GUI_RESOLUTION,25), choices=self.specimens, style=wx.CB_DROPDOWN,name="specimen")
@@ -364,12 +373,14 @@ class Demag_GUI(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.on_prev_button, self.prevbutton)
 
         select_specimen_window = wx.GridSizer(1, 2, 5, 10)
-        select_specimen_window.AddMany( [(self.prevbutton, wx.ALIGN_LEFT),
-            (self.nextbutton, wx.ALIGN_LEFT)])
+        select_specimen_window.AddMany( [(self.prevbutton, 1, wx.ALIGN_LEFT|wx.EXPAND),
+            (self.nextbutton, 1, wx.ALIGN_LEFT|wx.EXPAND)])
 
     #----------------------------------------------------------------------
         #  select coordinate box
     #----------------------------------------------------------------------
+
+        self.box_sizer_select_coordinates = wx.StaticBoxSizer( wx.StaticBox( self.panel, wx.ID_ANY, label="coordinate system:"), wx.VERTICAL )
 
         self.coordinate_list = ['specimen']
         intial_coordinate = 'specimen'
@@ -384,19 +395,18 @@ class Demag_GUI(wx.Frame):
         self.coordinates_box = wx.ComboBox(self.panel, -1, size=(150*self.GUI_RESOLUTION,25), choices=self.coordinate_list, value=intial_coordinate,style=wx.CB_DROPDOWN,name="coordinates")
         self.Bind(wx.EVT_COMBOBOX, self.onSelect_coordinates,self.coordinates_box)
 
+        self.box_sizer_select_zijd_options = wx.StaticBoxSizer( wx.StaticBox( self.panel, wx.ID_ANY, label="Zijderveld plot options:"), wx.VERTICAL )
+
         self.orthogonal_box = wx.ComboBox(self.panel, -1, value='X=East', size=(150*self.GUI_RESOLUTION,25), choices=['X=NRM dec','X=East','X=North'], style=wx.CB_DROPDOWN,name="orthogonal_plot")
         #remove 'X=best fit line dec' as option given that is isn't implemented for multiple components
         self.Bind(wx.EVT_COMBOBOX, self.onSelect_orthogonal_box,self.orthogonal_box)
 
-        self.box_sizer_select_specimen.Add(wx.StaticText(self.panel,label="specimen:",style=wx.TE_CENTER))
-        self.box_sizer_select_specimen.Add(self.specimens_box, 0, wx.TOP, 0 )
-        self.box_sizer_select_specimen.Add(select_specimen_window, 0, wx.TOP, 4 )
-        self.box_sizer_select_specimen.Add(wx.StaticLine(self.panel), 0, wx.ALL|wx.EXPAND, 5)
-        self.box_sizer_select_specimen.Add(wx.StaticText(self.panel,label="coordinate system:",style=wx.TE_CENTER))
-        self.box_sizer_select_specimen.Add(self.coordinates_box, 0, wx.TOP, 4 )
-        self.box_sizer_select_specimen.Add(wx.StaticLine(self.panel), 0, wx.ALL|wx.EXPAND, 5)
-        self.box_sizer_select_specimen.Add(wx.StaticText(self.panel,label="Zijderveld plot options:",style=wx.TE_CENTER))
-        self.box_sizer_select_specimen.Add(self.orthogonal_box, 0, wx.TOP, 4 )
+        self.box_sizer_select_specimen.Add(self.specimens_box, 1, wx.TOP|wx.EXPAND, 0 )
+        self.box_sizer_select_specimen.Add(select_specimen_window, 1, wx.TOP|wx.EXPAND, 4 )
+        self.box_sizer_select_specimen.Add(wx.StaticLine(self.panel), 1, wx.ALL|wx.EXPAND, 5)
+        self.box_sizer_select_coordinates.Add(self.coordinates_box, 1, wx.TOP|wx.EXPAND, 4 )
+        self.box_sizer_select_coordinates.Add(wx.StaticLine(self.panel), 1, wx.ALL|wx.EXPAND, 5)
+        self.box_sizer_select_zijd_options.Add(self.orthogonal_box, 1, wx.TOP|wx.EXPAND, 4 )
 
     #----------------------------------------------------------------------
         #  fit box
@@ -415,9 +425,9 @@ class Demag_GUI(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.add_fit, self.add_fit_button)
 
         fit_window = wx.GridSizer(2, 1, 10*self.GUI_RESOLUTION, 19*self.GUI_RESOLUTION)
-        fit_window.AddMany( [(self.add_fit_button, wx.ALIGN_LEFT),
-            (self.fit_box, wx.ALIGN_LEFT)])
-        self.box_sizer_fit.Add(fit_window, 0, wx.TOP, 5.5 )
+        fit_window.AddMany( [(self.add_fit_button, 1, wx.ALIGN_LEFT|wx.EXPAND),
+            (self.fit_box, 1, wx.ALIGN_LEFT|wx.EXPAND)])
+        self.box_sizer_fit.Add(fit_window, 1, wx.TOP|wx.EXPAND, 5.5 )
 
     #----------------------------------------------------------------------
         #  select bounds box
@@ -433,9 +443,9 @@ class Demag_GUI(wx.Frame):
         self.Bind(wx.EVT_COMBOBOX, self.get_new_PCA_parameters,self.tmax_box)
 
         select_temp_window = wx.GridSizer(2, 1, 10*self.GUI_RESOLUTION, 0)
-        select_temp_window.AddMany( [(self.tmin_box, wx.ALIGN_LEFT),
-            (self.tmax_box, wx.ALIGN_LEFT)])
-        self.box_sizer_select_bounds.Add(select_temp_window, 0, wx.ALIGN_LEFT, 3.5 )
+        select_temp_window.AddMany( [(self.tmin_box, 1, wx.ALIGN_LEFT|wx.EXPAND),
+            (self.tmax_box, 1, wx.ALIGN_LEFT)])
+        self.box_sizer_select_bounds.Add(select_temp_window, 1, wx.ALIGN_LEFT|wx.EXPAND, 3.5 )
 
     #----------------------------------------------------------------------
         #  save/delete box
@@ -452,9 +462,9 @@ class Demag_GUI(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.delete_fit, self.delete_interpretation_button)
 
         save_delete_window = wx.GridSizer(2, 1, 10*self.GUI_RESOLUTION, 19*self.GUI_RESOLUTION)
-        save_delete_window.AddMany( [(self.save_interpretation_button, wx.ALIGN_LEFT),
-            (self.delete_interpretation_button, wx.ALIGN_LEFT)])
-        self.box_sizer_save.Add(save_delete_window, 0, wx.TOP, 5.5 )
+        save_delete_window.AddMany( [(self.save_interpretation_button, 1, wx.ALIGN_LEFT|wx.EXPAND),
+            (self.delete_interpretation_button, 1, wx.ALIGN_LEFT|wx.EXPAND)])
+        self.box_sizer_save.Add(save_delete_window, 1, wx.TOP|wx.EXPAND, 5.5 )
 
     #----------------------------------------------------------------------
         # Specimen interpretation window
@@ -469,9 +479,9 @@ class Demag_GUI(wx.Frame):
         self.Bind(wx.EVT_COMBOBOX, self.on_select_plane_display_box, self.plane_display_box)
 
         specimen_stat_type_window = wx.GridSizer(2, 1, 10*self.GUI_RESOLUTION, 19*self.GUI_RESOLUTION)
-        specimen_stat_type_window.AddMany([(self.PCA_type_box, wx.ALIGN_LEFT),
-                                           (self.plane_display_box, wx.ALIGN_LEFT)])
-        self.box_sizer_specimen.Add(specimen_stat_type_window, 0, wx.ALIGN_LEFT, 0 )
+        specimen_stat_type_window.AddMany([(self.PCA_type_box, 1, wx.ALIGN_LEFT|wx.EXPAND),
+                                           (self.plane_display_box, 1, wx.ALIGN_LEFT|wx.EXPAND)])
+        self.box_sizer_specimen.Add(specimen_stat_type_window, 1, wx.ALIGN_LEFT|wx.EXPAND, 0 )
 
         self.box_sizer_specimen_stat = wx.StaticBoxSizer(wx.StaticBox(self.panel, wx.ID_ANY,"interpretation direction and statistics"), wx.HORIZONTAL )
 
@@ -484,19 +494,19 @@ class Demag_GUI(wx.Frame):
             exec COMMAND
 
         specimen_stat_window = wx.GridSizer(2, 6, 0, 15*self.GUI_RESOLUTION)
-        specimen_stat_window.AddMany( [(wx.StaticText(self.panel,label="\ndec",style=wx.TE_CENTER), wx.EXPAND),
-            (wx.StaticText(self.panel,label="\ninc",style=wx.TE_CENTER), wx.EXPAND),
-            (wx.StaticText(self.panel,label="\nn",style=wx.TE_CENTER),wx.EXPAND),
-            (wx.StaticText(self.panel,label="\nmad",style=wx.TE_CENTER),wx.EXPAND),
-            (wx.StaticText(self.panel,label="\ndang",style=wx.TE_CENTER),wx.TE_CENTER),
-            (wx.StaticText(self.panel,label="\na95",style=wx.TE_CENTER),wx.TE_CENTER),
-            (self.sdec_window, wx.EXPAND),
-            (self.sinc_window, wx.EXPAND) ,
-            (self.sn_window, wx.EXPAND) ,
-            (self.smad_window, wx.EXPAND),
-            (self.sdang_window, wx.EXPAND),
-            (self.salpha95_window, wx.EXPAND)])
-        self.box_sizer_specimen_stat.Add( specimen_stat_window, 0, wx.ALIGN_LEFT, 0)
+        specimen_stat_window.AddMany( [(wx.StaticText(self.panel,label="\ndec",style=wx.TE_CENTER), 1, wx.EXPAND),
+            (wx.StaticText(self.panel,label="\ninc",style=wx.TE_CENTER), 1, wx.EXPAND),
+            (wx.StaticText(self.panel,label="\nn",style=wx.TE_CENTER), 1, wx.EXPAND),
+            (wx.StaticText(self.panel,label="\nmad",style=wx.TE_CENTER), 1, wx.EXPAND),
+            (wx.StaticText(self.panel,label="\ndang",style=wx.TE_CENTER), 1, wx.TE_CENTER|wx.EXPAND),
+            (wx.StaticText(self.panel,label="\na95",style=wx.TE_CENTER), 1, wx.TE_CENTER|wx.EXPAND),
+            (self.sdec_window, 1, wx.EXPAND),
+            (self.sinc_window, 1, wx.EXPAND) ,
+            (self.sn_window, 1, wx.EXPAND) ,
+            (self.smad_window, 1, wx.EXPAND),
+            (self.sdang_window, 1, wx.EXPAND),
+            (self.salpha95_window, 1, wx.EXPAND)])
+        self.box_sizer_specimen_stat.Add( specimen_stat_window, 1, wx.ALIGN_LEFT|wx.EXPAND, 0)
 
     #----------------------------------------------------------------------
         # High level mean window
@@ -511,9 +521,9 @@ class Demag_GUI(wx.Frame):
         self.Bind(wx.EVT_COMBOBOX, self.onSelect_level_name,self.level_names)
 
         high_level_window = wx.GridSizer(2, 1, 10*self.GUI_RESOLUTION, 19*self.GUI_RESOLUTION)
-        high_level_window.AddMany( [(self.level_box, wx.ALIGN_LEFT),
-            (self.level_names, wx.ALIGN_LEFT)])
-        self.box_sizer_high_level.Add( high_level_window, 0, wx.TOP, 5.5 )
+        high_level_window.AddMany( [(self.level_box, 1, wx.ALIGN_LEFT|wx.EXPAND),
+            (self.level_names, 1, wx.ALIGN_LEFT|wx.EXPAND)])
+        self.box_sizer_high_level.Add( high_level_window, 1, wx.TOP|wx.EXPAND, 5.5 )
 
     #----------------------------------------------------------------------
         # mean types box
@@ -529,14 +539,26 @@ class Demag_GUI(wx.Frame):
         self.mean_fit = 'None'
 
         mean_types_window = wx.GridSizer(2, 1, 10*self.GUI_RESOLUTION, 19*self.GUI_RESOLUTION)
-        mean_types_window.AddMany([(self.mean_type_box,wx.ALIGN_LEFT),
-            (self.mean_fit_box,wx.ALIGN_LEFT)])
-        self.box_sizer_mean_types.Add(mean_types_window, 0, wx.TOP, 5.5 )
+        mean_types_window.AddMany([(self.mean_type_box,1,wx.ALIGN_LEFT|wx.EXPAND),
+            (self.mean_fit_box,1,wx.ALIGN_LEFT|wx.EXPAND)])
+        self.box_sizer_mean_types.Add(mean_types_window, 1, wx.TOP|wx.EXPAND, 5.5 )
+
+    #----------------------------------------------------------------------
+        # Warnings TextCtrl
+    #----------------------------------------------------------------------
+
+        self.box_sizer_warning = wx.StaticBoxSizer( wx.StaticBox(self.panel, wx.ID_ANY, "current data warnings"), wx.VERTICAL)
+
+        self.warning_box = wx.TextCtrl(self.panel, -1, size=(120*self.GUI_RESOLUTION, 65), value="No Problems", style=wx.TE_MULTILINE|wx.TE_READONLY|wx.HSCROLL, name="warning_box")
+
+        warning_window = wx.GridSizer(1, 1, 10*self.GUI_RESOLUTION, 19*self.GUI_RESOLUTION)
+        warning_window.Add(self.warning_box,1,wx.ALIGN_LEFT|wx.EXPAND)
+        self.box_sizer_warning.Add(warning_window, 1, wx.TOP|wx.EXPAND, 5.5)
 
     #----------------------------------------------------------------------
         # High level text box
     #----------------------------------------------------------------------
-        self.stats_sizer = wx.StaticBoxSizer( wx.StaticBox( self.panel, wx.ID_ANY,"mean statistics"  ), wx.VERTICAL)
+        self.stats_sizer = wx.StaticBoxSizer( wx.StaticBox(self.panel, wx.ID_ANY,"mean statistics"), wx.VERTICAL)
 
         for parameter in ['mean_type','dec','inc','alpha95','K','R','n_lines','n_planes']:
             COMMAND="self.%s_window=wx.TextCtrl(self.panel,style=wx.TE_CENTER|wx.TE_READONLY,size=(75*self.GUI_RESOLUTION,35))"%parameter
@@ -548,10 +570,10 @@ class Demag_GUI(wx.Frame):
             COMMAND="self.%s_outer_window = wx.GridSizer(1,2,5*self.GUI_RESOLUTION,15*self.GUI_RESOLUTION)"%parameter
             exec COMMAND
             COMMAND="""self.%s_outer_window.AddMany([
-                    (wx.StaticText(self.panel,label='%s',style=wx.TE_CENTER),wx.EXPAND),
-                    (self.%s_window, wx.EXPAND)])"""%(parameter,parameter,parameter)
+                    (wx.StaticText(self.panel,label='%s',style=wx.TE_CENTER),1,wx.EXPAND),
+                    (self.%s_window, 1, wx.EXPAND)])"""%(parameter,parameter,parameter)
             exec COMMAND
-            COMMAND="self.stats_sizer.Add(self.%s_outer_window, 0, wx.ALIGN_LEFT, 0)"%parameter
+            COMMAND="self.stats_sizer.Add(self.%s_outer_window, 1, wx.ALIGN_LEFT|wx.EXPAND, 0)"%parameter
             exec COMMAND
 
         self.switch_stats_button = wx.SpinButton(self.panel, id=wx.ID_ANY, style=wx.SP_HORIZONTAL|wx.SP_ARROW_KEYS|wx.SP_WRAP, name="change stats")
@@ -561,56 +583,61 @@ class Demag_GUI(wx.Frame):
         # Design the panel
     #----------------------------------------------------------------------
 
-        outer_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        outer_sizer.Add(self.panel)
-        self.SetSizerAndFit(outer_sizer)
+#        outer_sizer = wx.BoxSizer(wx.HORIZONTAL)
+#        outer_sizer.Add(self.panel)
+#        self.SetSizerAndFit(outer_sizer)
 
         vbox1 = wx.BoxSizer(wx.VERTICAL)
         hbox1 = wx.BoxSizer(wx.HORIZONTAL)
         vbox1.AddSpacer(10)
 
         hbox1.AddSpacer(2)
-        hbox1.Add(self.box_sizer_select_bounds,flag=wx.ALIGN_LEFT|wx.ALIGN_BOTTOM)
+        hbox1.Add(self.box_sizer_select_bounds,proportion=.5,flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND)
         hbox1.AddSpacer(2)
-        hbox1.Add(self.box_sizer_fit,flag=wx.ALIGN_LEFT|wx.ALIGN_BOTTOM)
+        hbox1.Add(self.box_sizer_fit,proportion=.5,flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND)
         hbox1.AddSpacer(2)
-        hbox1.Add(self.box_sizer_save,flag=wx.ALIGN_LEFT|wx.ALIGN_BOTTOM)
+        hbox1.Add(self.box_sizer_save,proportion=.5,flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND)
         hbox1.AddSpacer(2)
-        hbox1.Add(self.box_sizer_specimen, flag=wx.ALIGN_LEFT|wx.ALIGN_BOTTOM)
+        hbox1.Add(self.box_sizer_specimen,proportion=.5, flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND)
         hbox1.AddSpacer(2)
-        hbox1.Add(self.box_sizer_specimen_stat, flag=wx.ALIGN_LEFT|wx.ALIGN_BOTTOM)
+        hbox1.Add(self.box_sizer_specimen_stat,proportion=.5, flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND)
         hbox1.AddSpacer(2)
-        hbox1.Add(self.box_sizer_high_level, flag=wx.ALIGN_LEFT|wx.ALIGN_BOTTOM)
-        hbox1.Add(self.box_sizer_mean_types, flag=wx.ALIGN_LEFT|wx.ALIGN_BOTTOM)
+        hbox1.Add(self.box_sizer_high_level,proportion=.5, flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND)
+        hbox1.AddSpacer(2)
+        hbox1.Add(self.box_sizer_mean_types,proportion=.5, flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND)
+        hbox1.AddSpacer(2)
+        hbox1.Add(self.box_sizer_warning,proportion=1, flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND)
 
         vbox2a=wx.BoxSizer(wx.VERTICAL)
-        vbox2a.Add(self.box_sizer_select_specimen,flag=wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND,border=8)
-        vbox2a.Add(self.logger,flag=wx.ALIGN_TOP,border=8)
+        vbox2a.Add(self.box_sizer_select_specimen,proportion=.5,flag=wx.ALIGN_LEFT|wx.RIGHT|wx.EXPAND,border=4)
+        vbox2a.Add(self.box_sizer_select_coordinates,proportion=.5,flag=wx.ALIGN_LEFT|wx.RIGHT|wx.EXPAND,border=4)
+        vbox2a.Add(self.box_sizer_select_zijd_options,proportion=.5,flag=wx.ALIGN_LEFT|wx.RIGHT|wx.EXPAND,border=4)
+        vbox2a.Add(self.logger,proportion=1,flag=wx.ALIGN_TOP|wx.TOP|wx.EXPAND,border=8)
         hbox2 = wx.BoxSizer(wx.HORIZONTAL)
         hbox2.AddSpacer(2)
-        hbox2.Add(vbox2a,flag=wx.ALIGN_CENTER_HORIZONTAL)
-        hbox2.Add(self.canvas1,flag=wx.ALIGN_CENTER_HORIZONTAL,border=8)
+        hbox2.Add(vbox2a,flag=wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND)
+        hbox2.Add(self.canvas1,proportion=1,flag=wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND,border=8)
 
         vbox2 = wx.BoxSizer(wx.VERTICAL)
-        vbox2.Add(self.canvas2,flag=wx.ALIGN_LEFT,border=8)
-        vbox2.Add(self.canvas3,flag=wx.ALIGN_LEFT,border=8)
+        vbox2.Add(self.canvas2,proportion=1,flag=wx.ALIGN_LEFT|wx.EXPAND,border=8)
+        vbox2.Add(self.canvas3,proportion=1,flag=wx.ALIGN_LEFT|wx.EXPAND,border=8)
 
         vbox3 = wx.BoxSizer(wx.VERTICAL)
-        vbox3.Add(self.canvas4,flag=wx.ALIGN_LEFT|wx.ALIGN_TOP,border=8)
+        vbox3.Add(self.canvas4,proportion=1,flag=wx.ALIGN_LEFT|wx.ALIGN_TOP|wx.EXPAND,border=8)
 
         hbox3 = wx.BoxSizer(wx.HORIZONTAL)
-        hbox3.Add(self.stats_sizer,flag=wx.ALIGN_CENTER_VERTICAL,border=8)
-        hbox3.Add(self.switch_stats_button,flag=wx.ALIGN_CENTER_VERTICAL,border=8)
+        hbox3.Add(self.stats_sizer,proportion=1,flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND,border=8)
+        hbox3.Add(self.switch_stats_button,proportion=.5,flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND,border=8)
 
-        vbox3.Add(hbox3,flag=wx.ALIGN_CENTER_VERTICAL,border=8)
+        vbox3.Add(hbox3,proportion=1,flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND,border=8)
 
-        hbox2.Add(vbox2,flag=wx.ALIGN_CENTER_HORIZONTAL)
-        hbox2.Add(vbox3,flag=wx.ALIGN_CENTER_HORIZONTAL)
+        hbox2.Add(vbox2,proportion=.75,flag=wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND)
+        hbox2.Add(vbox3,proportion=.75,flag=wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND)
 
-        vbox1.Add(hbox1, flag=wx.ALIGN_LEFT)
-        vbox1.Add(hbox2, flag=wx.LEFT)
+        vbox1.Add(hbox1,proportion=.75, flag=wx.ALIGN_LEFT|wx.EXPAND)
+        vbox1.Add(hbox2,proportion=1, flag=wx.LEFT|wx.EXPAND)
 
-        self.panel.SetSizer(vbox1)
+        self.panel.SetSizerAndFit(vbox1)
         vbox1.Fit(self)
 
         self.GUI_SIZE = self.GetSize()
@@ -794,8 +821,6 @@ class Demag_GUI(wx.Frame):
 #==========================================================================================#
 
     def draw_figure(self,s,update_higher_plots=True):
-
-        print("drawing figure")
 
         step = ""
         self.initialize_CART_rot(s)
@@ -1232,8 +1257,6 @@ class Demag_GUI(wx.Frame):
         @alters: fit.lines, zijplot, specimen_eqarea_interpretation, mplot_interpretation
         """
 
-        print("drawing interpretation")
-
         problems = {}
 
         if self.s in self.pmag_results_data['specimens'] and \
@@ -1500,6 +1523,7 @@ class Demag_GUI(wx.Frame):
        self.high_level_eqarea.axes.set_aspect('equal')
        self.high_level_eqarea.axis('off')
        self.canvas4.draw()
+
        if self.interpretation_editor_open:
            self.update_higher_level_stats()
            self.interpretation_editor.update_editor(False)
@@ -1750,6 +1774,29 @@ class Demag_GUI(wx.Frame):
             CART_rot.append(array(pmag.dir2cart(DIR)))
         CART_rot=array(CART_rot)
         return(CART_rot)
+
+    def generate_warning_text(self):
+        """
+        generates warnings for the current specimen then adds them to the current warning text for the GUI which will be rendered on a call to update_warning_box.
+        """
+        self.warning_text = ""
+        if self.s in self.pmag_results_data['specimens'].keys():
+            for fit in self.pmag_results_data['specimens'][self.s]:
+                beg_pca,end_pca = self.get_indices(fit, fit.tmin, fit.tmax, self.s)
+                if beg_pca == None or end_pca == None: self.warning_text += "%s to %s are invalid bounds, to fit %s.\n"%(fit.tmin,fit.tmax,fit.name)
+                elif end_pca - beg_pca < 2: self.warning_text += "there are not enough points between %s to %s, on fit %s.\n"%(fit.tmin,fit.tmax,fit.name)
+                else:
+                    check_duplicates = []
+                    for s,f in zip(self.Data[self.s]['zijdblock_steps'][beg_pca:end_pca+1],self.Data[self.s]['measurement_flag'][beg_pca:end_pca+1]):
+                        if f == 'g' and [s,'g'] in check_duplicates:
+                            if s == fit.tmin: self.warning_text += "There are multiple good %s steps. The first measurement will be used for lower bound of fit %s.\n"%(s,fit.name)
+                            elif s == fit.tmax: self.warning_text += "There are multiple good %s steps. The first measurement will be used for upper bound of fit %s.\n"%(s,fit.name)
+                            else: self.warning_text += "Within Fit %s, there are multiple good measurements at the %s step. Both measurements are included in the fit.\n"%(fit.name,s)
+                        else:
+                            check_duplicates.append([s,f])
+        if self.s in self.Data.keys():
+            if not self.Data[self.s]['zijdblock_geo']: self.warning_text += "There is no geographic data for this specimen.\n"
+            if not self.Data[self.s]['zijdblock_tilt']: self.warning_text += "There is no tilt-corrected data for this specimen.\n"
 
     def get_PCA_parameters(self,specimen,fit,tmin,tmax,coordinate_system,calculation_type):
         """
@@ -2083,7 +2130,7 @@ class Demag_GUI(wx.Frame):
                 self.update_fit_boxes()
 
         if self.interpretation_editor_open:
-            self.interpretation_editor.update_editor()
+            self.interpretation_editor.update_editor(True)
 
     def recalculate_current_specimen_interpreatations(self):
         self.initialize_CART_rot(self.s)
@@ -2311,10 +2358,16 @@ class Demag_GUI(wx.Frame):
         meas_index = ind_data[g_index]
 
         self.Data[self.s]['measurement_flag'][g_index] = 'g'
+        if len(self.Data[self.s]['zijdblock'][g_index]) < 6:
+            self.Data[self.s]['zijdblock'][g_index].append('g')
         self.Data[self.s]['zijdblock'][g_index][5] = 'g'
         if 'zijdblock_geo' in self.Data[self.s] and g_index < len(self.Data[self.s]['zijdblock_geo']):
+            if len(self.Data[self.s]['zijdblock_geo'][g_index]) < 6:
+                self.Data[self.s]['zijdblock_geo'][g_index].append('g')
             self.Data[self.s]['zijdblock_geo'][g_index][5] = 'g'
         if 'zijdblock_tilt' in self.Data[self.s] and g_index < len(self.Data[self.s]['zijdblock_tilt']):
+            if len(self.Data[self.s]['zijdblock_tilt'][g_index]) < 6:
+                self.Data[self.s]['zijdblock_tilt'][g_index].append('g')
             self.Data[self.s]['zijdblock_tilt'][g_index][5] = 'g'
         self.mag_meas_data[meas_index]['measurement_flag'] = 'g'
 
@@ -2327,10 +2380,16 @@ class Demag_GUI(wx.Frame):
         meas_index = ind_data[g_index]
 
         self.Data[self.s]['measurement_flag'][g_index] = 'b'
+        if len(self.Data[self.s]['zijdblock'][g_index]) < 6:
+            self.Data[self.s]['zijdblock'][g_index].append('g')
         self.Data[self.s]['zijdblock'][g_index][5] = 'b'
         if 'zijdblock_geo' in self.Data[self.s] and g_index < len(self.Data[self.s]['zijdblock_geo']):
+            if len(self.Data[self.s]['zijdblock_geo'][g_index]) < 6:
+                self.Data[self.s]['zijdblock_geo'][g_index].append('g')
             self.Data[self.s]['zijdblock_geo'][g_index][5] = 'b'
         if 'zijdblock_tilt' in self.Data[self.s] and g_index < len(self.Data[self.s]['zijdblock_tilt']):
+            if len(self.Data[self.s]['zijdblock_tilt'][g_index]) < 6:
+                self.Data[self.s]['zijdblock_tilt'][g_index].append('g')
             self.Data[self.s]['zijdblock_tilt'][g_index][5] = 'b'
         self.mag_meas_data[meas_index]['measurement_flag'] = 'b'
 
@@ -2861,8 +2920,16 @@ class Demag_GUI(wx.Frame):
         for i,update_file in enumerate(update_files):
             update_lines = update_file.split('\t')
             if not os.path.isfile(update_lines[0]):
-                print("%s does not exist and will be skipped"%(update_lines[0]))
-                continue
+                print("%s not found searching for location of file"%(update_lines[0]))
+                sam_file_name = os.path.split(update_lines[0])[-1]
+                new_file_path = find_file(sam_file_name, self.WD)
+                if new_file_path == None or not os.path.isfile(new_file_path):
+                    print("%s does not exist in any subdirectory of %s and will be skipped"%(update_lines[0], self.WD))
+                    new_inp_file += update_file+"\n"
+                    continue
+                else:
+                    print("new location for file found at %s"%(new_file_path))
+                    update_lines[0] = new_file_path
             d = reduce(lambda x,y: x+"/"+y, update_lines[0].split("/")[:-1])+"/"
             f = update_lines[0].split("/")[-1].split(".")[0] + ".magic"
             if (d+f) in magic_files:
@@ -3010,60 +3077,58 @@ class Demag_GUI(wx.Frame):
                 if "DE-" in method:
                     calculation_type=method
 
-            if LPDIR: # this a mean of directions
-
-                #if interpretation doesn't exsist create it.
-                if 'specimen_comp_name' in rec.keys():
-                    if rec['specimen_comp_name'] not in map(lambda x: x.name, self.pmag_results_data['specimens'][specimen]) and int(rec['specimen_tilt_correction']) == current_tilt_correction:
-                        next_fit = str(len(self.pmag_results_data['specimens'][self.s]) + 1)
-                        color = self.colors[(int(next_fit)-1) % len(self.colors)]
-                        self.pmag_results_data['specimens'][self.s].append(Fit(rec['specimen_comp_name'], None, None, color, self))
-                        fit = self.pmag_results_data['specimens'][specimen][-1]
-                    else:
-                        fit = None
+            #if interpretation doesn't exsist create it.
+            if 'specimen_comp_name' in rec.keys():
+                if rec['specimen_comp_name'] not in map(lambda x: x.name, self.pmag_results_data['specimens'][specimen]) and int(rec['specimen_tilt_correction']) == current_tilt_correction:
+                    next_fit = str(len(self.pmag_results_data['specimens'][self.s]) + 1)
+                    color = self.colors[(int(next_fit)-1) % len(self.colors)]
+                    self.pmag_results_data['specimens'][self.s].append(Fit(rec['specimen_comp_name'], None, None, color, self))
+                    fit = self.pmag_results_data['specimens'][specimen][-1]
                 else:
-                    if int(rec['specimen_tilt_correction']) == current_tilt_correction:
-                        next_fit = str(len(self.pmag_results_data['specimens'][self.s]) + 1)
-                        color = self.colors[(int(next_fit)-1) % len(self.colors)]
-                        self.pmag_results_data['specimens'][self.s].append(Fit('Fit ' + next_fit, None, None, color, self))
-                        fit = self.pmag_results_data['specimens'][specimen][-1]
-                    else: fit = None
+                    fit = None
+            else:
+                if rec['specimen_tilt_correction'].isdigit() and int(float(rec['specimen_tilt_correction'])) == current_tilt_correction:
+                    next_fit = str(len(self.pmag_results_data['specimens'][self.s]) + 1)
+                    color = self.colors[(int(next_fit)-1) % len(self.colors)]
+                    self.pmag_results_data['specimens'][self.s].append(Fit('Fit ' + next_fit, None, None, color, self))
+                    fit = self.pmag_results_data['specimens'][specimen][-1]
+                else: fit = None
 
 
-                if 'specimen_flag' in rec and rec['specimen_flag'] == 'b':
-                    self.bad_fits.append(fit)
+            if 'specimen_flag' in rec and rec['specimen_flag'] == 'b':
+                self.bad_fits.append(fit)
 
-                if float(rec['measurement_step_min'])==0 or float(rec['measurement_step_min'])==273.:
-                    tmin="0"
-                elif float(rec['measurement_step_min'])>2: # thermal
-                    tmin="%.0fC"%(float(rec['measurement_step_min'])-273.)
-                else: # AF
-                    tmin="%.1fmT"%(float(rec['measurement_step_min'])*1000.)
+            if float(rec['measurement_step_min'])==0 or float(rec['measurement_step_min'])==273.:
+                tmin="0"
+            elif float(rec['measurement_step_min'])>2: # thermal
+                tmin="%.0fC"%(float(rec['measurement_step_min'])-273.)
+            else: # AF
+                tmin="%.1fmT"%(float(rec['measurement_step_min'])*1000.)
 
-                if float(rec['measurement_step_max'])==0 or float(rec['measurement_step_max'])==273.:
-                    tmax="0"
-                elif float(rec['measurement_step_max'])>2: # thermal
-                    tmax="%.0fC"%(float(rec['measurement_step_max'])-273.)
-                else: # AF
-                    tmax="%.1fmT"%(float(rec['measurement_step_max'])*1000.)
+            if float(rec['measurement_step_max'])==0 or float(rec['measurement_step_max'])==273.:
+                tmax="0"
+            elif float(rec['measurement_step_max'])>2: # thermal
+                tmax="%.0fC"%(float(rec['measurement_step_max'])-273.)
+            else: # AF
+                tmax="%.1fmT"%(float(rec['measurement_step_max'])*1000.)
 
-                if calculation_type !="":
+            if calculation_type !="":
 
-                    if specimen in self.Data.keys() and 'zijdblock_steps' in self.Data[specimen]\
-                    and tmin in self.Data[specimen]['zijdblock_steps']\
-                    and tmax in self.Data[specimen]['zijdblock_steps']:
+                if specimen in self.Data.keys() and 'zijdblock_steps' in self.Data[specimen]\
+                and tmin in self.Data[specimen]['zijdblock_steps']\
+                and tmax in self.Data[specimen]['zijdblock_steps']:
 
-                        if fit:
-                            fit.put(specimen,'specimen',self.get_PCA_parameters(specimen,fit,tmin,tmax,'specimen',calculation_type))
+                    if fit:
+                        fit.put(specimen,'specimen',self.get_PCA_parameters(specimen,fit,tmin,tmax,'specimen',calculation_type))
 
-                            if len(self.Data[specimen]['zijdblock_geo'])>0:
-                                fit.put(specimen,'geographic',self.get_PCA_parameters(specimen,fit,tmin,tmax,'geographic',calculation_type))
+                        if len(self.Data[specimen]['zijdblock_geo'])>0:
+                            fit.put(specimen,'geographic',self.get_PCA_parameters(specimen,fit,tmin,tmax,'geographic',calculation_type))
 
-                            if len(self.Data[specimen]['zijdblock_tilt'])>0:
-                                fit.put(specimen,'tilt-corrected',self.get_PCA_parameters(specimen,fit,tmin,tmax,'tilt-corrected',calculation_type))
+                        if len(self.Data[specimen]['zijdblock_tilt'])>0:
+                            fit.put(specimen,'tilt-corrected',self.get_PCA_parameters(specimen,fit,tmin,tmax,'tilt-corrected',calculation_type))
 
-                    else:
-                        print( "-W- WARNING: Cant find specimen and steps of specimen %s tmin=%s, tmax=%s"%(specimen,tmin,tmax))
+                else:
+                    print( "-W- WARNING: Cant find specimen and steps of specimen %s tmin=%s, tmax=%s"%(specimen,tmin,tmax))
 
         #BUG FIX-almost replaced first sample with last due to above assignment to self.s
         if self.specimens:
@@ -3466,6 +3531,10 @@ class Demag_GUI(wx.Frame):
         else:
             self.draw_figure(self.s,True)
 
+        #update warning
+        self.generate_warning_text()
+        self.update_warning_box()
+        #update choices in the fit box
         self.update_fit_boxes()
         # measurements text box
         self.Add_text()
@@ -3473,6 +3542,16 @@ class Demag_GUI(wx.Frame):
         self.update_higher_level_stats()
         #redraw interpretations
         self.update_GUI_with_new_interpretation()
+
+    def update_warning_box(self):
+        """
+        updates the warning box with whatever the warning_text variable contains for this specimen
+        """
+        self.warning_box.Clear()
+        if self.warning_text == "":
+            self.warning_box.AppendText("No Problems")
+        else:
+            self.warning_box.AppendText(self.warning_text)
 
     def update_GUI_with_new_interpretation(self):
         """
@@ -4365,44 +4444,78 @@ class Demag_GUI(wx.Frame):
         try: self.toolbar1.home()
         except TypeError: pass
 
-    def pick_bounds(self,event):
+    def on_zijd_select(self,event):
         """
-        (currently unsupported)
-        attempt at a functionality to pick bounds by clicking on the zijderveld
-        @param: event -> the wx.MouseEvent that triggered the call of this function
-        @alters: ...
+        Get mouse position on double click find the nearest interpretation to the mouse
+        position then select that interpretation
+        @param: event -> the wx Mouseevent for that click
+        @alters: current_fit
         """
+        if not self.CART_rot_good.any(): return
         pos=event.GetPosition()
-        e = 1e-2
-        l = len(self.CART_rot_good[:,0])
-        def distance(p1,p2):
-            return sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
-        points = []
-        inv = self.zijplot.transData.inverted()
-        reverse = inv.transform(vstack([pos[0],pos[1]]).T)
-        xpick_data,ypick_data = reverse.T
-        pos = (xpick_data,ypick_data)
-        for data in [self.zij_xy_points,self.zij_xz_points]:
-            x, y = data.get_data()
-            points += [(x[i],y[i]) for i in range(len(x))]
+        width, height = self.canvas1.get_width_height()
+        pos[1] = height - pos[1]
+        xpick_data,ypick_data = pos
+        xdata_org = list(self.CART_rot_good[:,0]) + list(self.CART_rot_good[:,0])
+        ydata_org = list(-1*self.CART_rot_good[:,1]) + list(-1*self.CART_rot_good[:,2])
+        data_corrected = self.zijplot.transData.transform(vstack([xdata_org,ydata_org]).T)
+        xdata,ydata = data_corrected.T
+        xdata = map(float,xdata)
+        ydata = map(float,ydata)
+        e = 4.0
+
         index = None
-        print("getting nearest step at: " + str(pos))
-        print(points)
-        for point in points:
-            if 0 <= distance(pos,point) <= e:
-                index = points.index(point)%l
-                step = self.Data[self.s]['zijdblock_steps'][index]
-                print(step)
+        for i,(x,y) in enumerate(zip(xdata,ydata)):
+            if 0 < sqrt((x-xpick_data)**2. + (y-ypick_data)**2.) < e:
+                index = i
                 break
-        class Dumby_Event:
-            def __init__(self,text):
-                self.text = text
-            def GetText(self):
-                return self.text
-        if index:
-            dumby_event = Dumby_Event(index)
-            self.OnClick_listctrl(dumby_event)
-        self.zoom(event)
+        if index != None:
+            steps = self.Data[self.s]['zijdblock_steps']
+            bad_count = self.Data[self.s]['measurement_flag'][:index].count('b')
+            if index > len(steps): bad_count *= 2
+            if not self.current_fit:
+                self.add_fit(event)
+            self.select_bounds_in_logger((index+bad_count)%len(steps))
+
+    def on_zijd_mark(self,event):
+        """
+        Get mouse position on double right click find the interpretation in range of mose
+        position then mark that interpretation bad or good
+        @param: event -> the wx Mouseevent for that click
+        @alters: current_fit
+        """
+        if not self.CART_rot_good.any(): return
+        pos=event.GetPosition()
+        width, height = self.canvas1.get_width_height()
+        pos[1] = height - pos[1]
+        xpick_data,ypick_data = pos
+        xdata_org = list(self.CART_rot[:,0]) + list(self.CART_rot[:,0])
+        ydata_org = list(-1*self.CART_rot[:,1]) + list(-1*self.CART_rot[:,2])
+        data_corrected = self.zijplot.transData.transform(vstack([xdata_org,ydata_org]).T)
+        xdata,ydata = data_corrected.T
+        xdata = map(float,xdata)
+        ydata = map(float,ydata)
+        e = 4e0
+
+        index = None
+        for i,(x,y) in enumerate(zip(xdata,ydata)):
+            if 0 < sqrt((x-xpick_data)**2. + (y-ypick_data)**2.) < e:
+                index = i
+                break
+        if index != None:
+            steps = self.Data[self.s]['zijdblock']
+            if self.Data[self.s]['measurement_flag'][index%len(steps)] == "g":
+                self.mark_meas_bad(index%len(steps))
+            else:
+                self.mark_meas_good(index%len(steps))
+            pmag.magic_write(os.path.join(self.WD, "magic_measurements.txt"),self.mag_meas_data,"magic_measurements")
+
+            self.recalculate_current_specimen_interpreatations()
+
+            if self.interpretation_editor_open:
+                self.interpretation_editor.update_current_fit_data()
+            self.calculate_higher_levels_data()
+            self.update_selection()
 
     def right_click_specimen_equalarea(self,event):
         """
@@ -4692,6 +4805,14 @@ class Demag_GUI(wx.Frame):
                 self.logger.SetItemBackgroundColour(item,"WHITE")
 
         index=int(event.GetText())
+        self.select_bounds_in_logger(index)
+
+    def select_bounds_in_logger(self, index):
+        """
+        sets index as the upper or lower bound of a fit based on what the other bound is and selects it in the logger. Requires 2 calls to completely update a interpretation. NOTE: Requires an interpretation to exist before it is called.
+        @param: index - index of the step to select in the logger
+        """
+
         tmin_index,tmax_index="",""
 
         if str(self.tmin_box.GetValue())!="":
@@ -4994,6 +5115,8 @@ class Demag_GUI(wx.Frame):
         if ('Fit ' + next_fit) in map(lambda x: x.name, self.pmag_results_data['specimens'][self.s]): print('bad name'); return
         self.pmag_results_data['specimens'][self.s].append(Fit('Fit ' + next_fit, None, None, self.colors[(int(next_fit)-1) % len(self.colors)], self))
 #        print("New Fit for sample: " + str(self.s) + '\n' + reduce(lambda x,y: x+'\n'+y, map(str,self.pmag_results_data['specimens'][self.s]['fits'])))
+        self.generate_warning_text()
+        self.update_warning_box()
         if plot_new_fit:
             self.new_fit()
 
