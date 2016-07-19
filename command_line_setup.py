@@ -1,4 +1,3 @@
-
 # Always prefer setuptools over distutils
 from setuptools import setup, find_packages
 # To use a consistent encoding
@@ -9,7 +8,7 @@ from os import path
 # Get list of programs to alias
 from programs_list import programs_list
 
-version_num = '1.0.6'
+version_num = '3.4.1'
 here = path.abspath(path.dirname(__file__))
 
 packages=find_packages(exclude=['pmagpy', 'pmagpy_tests.examples'
@@ -48,13 +47,13 @@ setup(
         #   4 - Beta
         #   5 - Production/Stable
         'Development Status :: 4 - Beta',
-        
+
         # Indicate who your project is intended for
         #'Intended Audience :: Geologists',
-        
+
         # Pick your license as you wish (should match "license" above)
         'License :: OSI Approved :: MIT License',
-        
+
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
         'Programming Language :: Python :: 2',
@@ -122,7 +121,8 @@ setup(
                     'magic_gui.py = programs.magic_gui:main',
                     'pmag_gui.py = programs.pmag_gui:main',
                     'demag_gui.py = programs.demag_gui:main',
-                    'thellier_gui.py = programs.thellier_gui:main'
+                    'thellier_gui.py = programs.thellier_gui:main',
+                    'pmag_gui = programs.pmag_gui:main'
             ]
     }
 

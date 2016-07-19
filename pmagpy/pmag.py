@@ -11,6 +11,7 @@ import time
 #import check_updates
 import scipy
 from scipy import array,sqrt,mean
+from SPD.mapping import map_magic
 
 #pylint: skip-file
 
@@ -503,7 +504,7 @@ def default_criteria(nocrit):
         Crits['site_k']='50'
     return [Crits]
 
-def grade(PmagRec,ACCEPT,type):
+def grade(PmagRec,ACCEPT,type,data_model=2.5):
     """
     Finds the 'grade' (pass/fail; A/F) of a record (specimen,sample,site) given the acceptance criteria
     """
@@ -515,16 +516,28 @@ def grade(PmagRec,ACCEPT,type):
     accept={}
     if type=='specimen_int':
         USEKEYS=['specimen_q','measurement_step_min','measurement_step_max','specimen_int_ptrm_n','specimen_fvds','specimen_frac','specimen_f','specimen_int_n','specimen_magn_moment','specimen_magn_volumn','specimen_rsc','specimen_scat','specimen_drats','specimen_int_mad','specimen_int_dang','specimen_md','specimen_b_beta','specimen_w','specimen_gmax']
+        if data_model==3.0:
+            USEKEYS=[map_magic.spec_magic2_2_magic3_map[k] for k in USEKEYS]
     elif type=='specimen_dir':
         USEKEYS=['measurement_step_min','measurement_step_max','specimen_mad','specimen_n','specimen_magn_moment','specimen_magn_volumn']
+        if data_model==3.0:
+            USEKEYS=[map_magic.spec_magic2_2_magic3_map[k] for k in USEKEYS]
     elif type=='sample_int':
         USEKEYS=['sample_int_n','sample_int_sigma','sample_int_sigma_perc']
+        if data_model==3.0:
+            USEKEYS=[map_magic.samp_magic2_2_magic3_map[k] for k in USEKEYS]
     elif type=='sample_dir':
         USEKEYS=['sample_alpha95','sample_n','sample_n_lines','sample_n_planes','sample_k','sample_r']
+        if data_model==3.0:
+            USEKEYS=[map_magic.samp_magic2_2_magic3_map[k] for k in USEKEYS]
     elif type=='site_int':
         USEKEYS=['site_int_sigma','site_int_sigma_perc','site_int_n']
+        if data_model==3.0:
+            USEKEYS=[map_magic.site_magic2_2_magic3_map[k] for k in USEKEYS]
     elif type=='site_dir':
         USEKEYS=['site_alpha95','site_k','site_n','site_n_lines','site_n_planes','site_r']
+        if data_model==3.0:
+            USEKEYS=[map_magic.site_magic2_2_magic3_map[k] for k in USEKEYS]
 
     for key in ACCEPT.keys():
         if ACCEPT[key]!="" and key in USEKEYS:
@@ -659,15 +672,36 @@ def dia_vgp(*args): # new function interface by J.Holmes, SIO, 6/1/2011
     plat,plong=plat/rad,plong/rad
     return plong.tolist(),plat.tolist(),dp.tolist(),dm.tolist()
 
-def int_pars(x,y,vds):
+def int_pars(x,y,vds,**kwargs):
     """
      calculates York regression and Coe parameters (with Tauxe Fvds)
     """
 # first do linear regression a la York
+    if 'version' in kwargs.keys() and kwargs['version']==3: # do Data Model 3 way:
+        n_key='int_n_measurements'
+        b_key='int_b'
+        sigma_key='int_b_sigma'
+        f_key='int_f'
+        fvds_key='int_fvds'
+        g_key='int_g'
+        q_key='int_q'
+        b_beta_key=='int_b_beta'
+
+    else: # version 2
+        n_key='specimen_int_n'
+        b_key='specimen_b'
+        sigma_key='specimen_b_sigma'
+        f_key='specimen_f'
+        fvds_key='specimen_fvds'
+        g_key='specimen_g'
+        q_key='specimen_q'
+        b_beta_key=='specimen_b_beta'
+
+
     xx,yer,xer,xyer,yy,xsum,ysum,xy=0.,0.,0.,0.,0.,0.,0.,0.
     xprime,yprime=[],[]
     pars={}
-    pars["specimen_int_n"]=len(x)
+    pars[n_key]=len(x)
     n=float(len(x))
     if n<=2:
         print "shouldn't be here at all!"
@@ -686,11 +720,11 @@ def int_pars(x,y,vds):
         xer+= (x[i]-xsum/n)**2.
         xyer+= (y[i]-ysum/n)*(x[i]-xsum/n)
     slop=-numpy.sqrt(yer/xer)
-    pars["specimen_b"]=slop
+    pars[b_key]=slop
     s1=2.*yer-2.*slop*xyer
     s2=(n-2.)*xer
     sigma=numpy.sqrt(s1/s2)
-    pars["specimen_b_sigma"]=sigma
+    pars[sigma_key]=sigma
     s=(xy-(xsum*ysum/n))/(xx-(xsum**2.)/n)
     r=(s*xsig)/ysig
     pars["specimen_rsc"]=r**2.
@@ -704,16 +738,16 @@ def int_pars(x,y,vds):
         dy.append(abs(yprime[i+1]-yprime[i]))
         sumdy+= dy[i]**2.
     f=dyt/ytot
-    pars["specimen_f"]=f
+    pars[f_key]=f
     pars["specimen_ytot"]=ytot
     ff=dyt/vds
-    pars["specimen_fvds"]=ff
+    pars[fvds_key]=ff
     ddy=(1./dyt)*sumdy
     g=1.-ddy/dyt
-    pars["specimen_g"]=g
+    pars[g_key]=g
     q=abs(slop)*f*g/sigma
-    pars["specimen_q"]=q
-    pars["specimen_b_beta"]=-sigma/slop
+    pars[q_key]=q
+    pars[b_beta_key]=-sigma/slop
     return pars,0
 
 def dovds(data):
@@ -861,21 +895,41 @@ def mark_samp(Samps,data,crd):
 
     return Samps
 
-def find_dmag_rec(s,data):
+def find_dmag_rec(s,data,**kwargs):
     """
     returns demagnetization data for specimen s from the data - excludes other kinds of experiments and "bad" measurements
     """
+    if 'version' in kwargs.keys() and kwargs['version']==3: 
+        data=data.to_dict('records')  # convert dataframe to list of dictionaries
+        spec_key,dec_key,inc_key='specimen','dir_dec','dir_inc'
+        flag_key,temp_key,ac_key='flag','treat_temp','treat_ac_field'
+        meth_key='method_codes'
+        power_key,time_key='treat_mw_power','treat_mw_time'
+        Mkeys=['magn_moment','magn_volume','magn_mass','magnitude']
+        # just look in the intensity column
+        inst_key='instrument_codes'
+    else:
+        spec_key,dec_key,inc_key='er_specimen_name','measurement_dec','measurement_inc'
+        flag_key='measurement_flag'
+        flag_key,temp_key,ac_key='measurement_flag','treatment_temp','treatment_ac_field'
+        meth_key='magic_method_codes'
+        power_key,time_key='treatment_mw_power','treatment_mw_time'
+        Mkeys=['measurement_magn_moment','measurement_magn_volume','measurement_magn_mass','measurement_magnitude']
+        inst_key='magic_instrument_codes'
+
     EX=["LP-AN-ARM","LP-AN-TRM","LP-ARM-AFD","LP-ARM2-AFD","LP-TRM-AFD","LP-TRM","LP-TRM-TD","LP-X"] # list of excluded lab protocols
     INC=["LT-NO","LT-AF-Z","LT-T-Z", "LT-M-Z", "LP-PI-TRM-IZ", "LP-PI-M-IZ"]
     datablock,tr=[],""
     therm_flag,af_flag,mw_flag=0,0,0
     units=[]
-    spec_meas=get_dictitem(data,'er_specimen_name',s,'T')
+    spec_meas=get_dictitem(data,spec_key,s,'T')
     for rec in spec_meas:
-           if 'measurement_flag' not in rec.keys():rec['measurement_flag']='g'
+           if flag_key not in rec.keys():rec[flag_key]='g'
            skip=1
            tr=""
-           methods=rec["magic_method_codes"].split(":")
+           meths=rec[meth_key].split(":")
+           methods=[]
+           for m in meths:methods.append(m.strip()) # get rid of the stupid spaces!
            for meth in methods:
                if meth.strip() in INC:
                    skip=0
@@ -883,34 +937,33 @@ def find_dmag_rec(s,data):
                if meth in methods:skip=1
            if skip==0:
                if "LT-NO" in methods:
-                   tr = float(rec["treatment_temp"])
+                   tr = float(rec[temp_key])
                if "LT-AF-Z" in methods:
                    af_flag=1
-                   tr = float(rec["treatment_ac_field"])
+                   tr = float(rec[ac_key])
                    if "T" not in units:units.append("T")
                if "LT-T-Z" in methods:
                    therm_flag=1
-                   tr = float(rec["treatment_temp"])
+                   tr = float(rec[temp_key])
                    if "K" not in units:units.append("K")
                if "LT-M-Z" in methods:
                    mw_flag=1
-                   tr = float(rec["treatment_mw_power"])*float(rec["treatment_mw_time"])
+                   tr = float(rec[power_key])*float(rec[time_key])
                    if "J" not in units:units.append("J")
                if "LP-PI-TRM-IZ" in methods or "LP-PI-M-IZ" in methods:  # looking for in-field first thellier or microwave data - otherwise, just ignore this
                    ZI=0
                else:
                    ZI=1
-               Mkeys=['measurement_magnitude','measurement_magn_moment','measurement_magn_volume','measurement_magn_mass']
                if tr !="":
                    dec,inc,int = "","",""
-                   if "measurement_dec" in rec.keys() and rec["measurement_dec"] != "":
-                       dec=float(rec["measurement_dec"])
-                   if "measurement_inc" in rec.keys() and rec["measurement_inc"] != "":
-                       inc=float(rec["measurement_inc"])
+                   if dec_key in rec.keys() and rec[dec_key] != "":
+                       dec=float(rec[dec_key])
+                   if inc_key in rec.keys() and rec[inc_key] != "":
+                       inc=float(rec[inc_key])
                    for key in Mkeys:
                        if key in rec.keys() and rec[key]!="":int=float(rec[key])
-                   if 'magic_instrument_codes' not in rec.keys():rec['magic_instrument_codes']=''
-                   datablock.append([tr,dec,inc,int,ZI,rec['measurement_flag'],rec['magic_instrument_codes']])
+                   if inst_key not in rec.keys():rec[inst_key]=''
+                   datablock.append([tr,dec,inc,int,ZI,rec[flag_key],rec[inst_key]])
     if therm_flag==1:
         for k in range(len(datablock)):
             if datablock[k][0]==0.: datablock[k][0]=273.
@@ -923,7 +976,8 @@ def find_dmag_rec(s,data):
         meas_units=meas_units[:-1]
     return datablock,meas_units
 
-def magic_read(infile, data=None):
+
+def magic_read(infile, data=None, return_keys=False):
     """
     reads  a Magic template file, puts data in a list of dictionaries.
     """
@@ -993,7 +1047,21 @@ def magic_read(infile, data=None):
     magictype=file_type.lower().split("_")
     Types=['er','magic','pmag','rmag']
     if magictype in Types:file_type=file_type.lower()
+    if return_keys:
+        return magic_data, file_type, magic_keys
     return magic_data,file_type
+
+def sort_magic_data(magic_data,sort_name):
+    '''
+    sort magic_data by on header (like er_specimen_name for example)
+    '''
+    magic_data_sorted={}
+    for rec in magic_data:
+       name=rec[sort_name]
+       if name not in magic_data_sorted.keys():
+           magic_data_sorted[name]=[]
+       magic_data_sorted[name].append(rec)
+    return  magic_data_sorted 
 
 def upload_read(infile,table):
     """
@@ -1538,6 +1606,7 @@ def domean(indata,start,end,calculation_type):
                X[k][l]=X[k][l]-cm[l]
     else:
         mpars["specimen_direction_type"]='p'
+
 #
 #   put in T matrix
 #
@@ -1654,10 +1723,53 @@ def circ(dec,dip,alpha):
         I_out.append(Dir[1])
     return D_out,I_out
 
-def PintPars(datablock,araiblock,zijdblock,start,end,accept):
+def PintPars(datablock,araiblock,zijdblock,start,end,accept,**kwargs):
     """
      calculate the paleointensity magic parameters  make some definitions
     """
+    if 'version' in kwargs.keys() and kwargs['version']==3:  
+        meth_key='method_codes'
+        beta_key='int_b_beta'
+        temp_key,min_key,max_key='treat_temp','meas_step_min','meas_step_max'
+        dc_theta_key,dc_phi_key='treat_dc_field_theta','treat_dc_field_phi'
+        datablock=datablock.to_dict('records')  # convert dataframe to list of dictionaries
+        z_key='int_z'
+        drats_key='int_drats'
+        drat_key='int_drat'
+        md_key='int_md'
+        dec_key='dir_dec'
+        inc_key='dir_inc'
+        mad_key='int_mad_free'
+        dang_key='int_dang'
+        ptrm_key='int_n_ptrm'
+        theta_key='int_theta'
+        gamma_key='int_gamma'
+        delta_key='int_delta'
+        frac_key='int_frac'
+        gmax_key='int_gmax'
+        scat_key='int_scat'
+    else:
+        beta_key='specimen_b_beta'
+        meth_key='magic_method_codes'
+        temp_key,min_key,max_key='treatment_temp','measurement_step_min','measurement_step_max'
+        z_key='specimen_z'
+        drats_key='specimen_drats'
+        drat_key='specimen_drat'
+        md_key='specimen_md'
+        dec_key='specimen_dec'
+        inc_key='specimen_inc'
+        mad_key='specimen_mad'
+        dang_key='specimen_dang'
+        ptrm_key='specimen_int_ptrm_n'
+        theta_key='specimen_theta'
+        gamma_key='specimen_gamma'
+        delta_key='specimen_delta'
+        frac_key='specimen_frac'
+        gmax_key='specimen_gmax'
+        scat_key='specimen_scat'
+
+
+    first_Z,first_I,zptrm_check,ptrm_check,ptrm_tail=[],[],[],[],[]
     methcode,ThetaChecks,DeltaChecks,GammaChecks="","","",""
     zptrm_check=[]
     first_Z,first_I,ptrm_check,ptrm_tail,zptrm_check,GammaChecks=araiblock[0],araiblock[1],araiblock[2],araiblock[3],araiblock[4],araiblock[5]
@@ -1764,8 +1876,8 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
             if Trat>1  and Trat>Frat:
                 ZigZag=Trat # fails zigzag on directions
                 methcode="SM-TTEST"
-    pars["specimen_Z"]=ZigZag
-    pars["method_codes"]=methcode
+    pars[z_key]=ZigZag
+    pars[meth_key]=methcode
 # do drats
     if len(ptrm_check) != 0:
         diffcum,drat_max=0,0
@@ -1781,8 +1893,8 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
                     if irec[0]==step:break
                 diffcum+=prec[3]-irec[3]
                 if abs(prec[3]-irec[3])>drat_max:drat_max=abs(prec[3]-irec[3])
-        pars["specimen_drats"]=(100*abs(diffcum)/first_I[zend][3])
-        pars["specimen_drat"]=(100*abs(drat_max)/first_I[zend][3])
+        pars[drats_key]=(100*abs(diffcum)/first_I[zend][3])
+        pars[drat_key]=(100*abs(drat_max)/first_I[zend][3])
     elif len(zptrm_check) != 0:
         diffcum=0
         for prec in zptrm_check:
@@ -1796,10 +1908,10 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
                 for irec in first_I:
                     if irec[0]==step:break
                 diffcum+=prec[3]-irec[3]
-        pars["specimen_drats"]=(100*abs(diffcum)/first_I[zend][3])
+        pars[drats_key]=(100*abs(diffcum)/first_I[zend][3])
     else:
-        pars["specimen_drats"]=-1
-        pars["specimen_drat"]=-1
+        pars[drats_key]=-1
+        pars[drat_key]=-1
 # and the pTRM tails
     if len(ptrm_tail) != 0:
         for trec in ptrm_tail:
@@ -1807,33 +1919,32 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
             for irec in first_I:
                 if irec[0]==step:break
             if abs(trec[3]) >dmax:dmax=abs(trec[3])
-        pars["specimen_md"]=(100*dmax/vds)
-    else: pars["specimen_md"]=-1
-    pars["measurement_step_min"]=bstep
-    pars["measurement_step_max"]=estep
-    pars["specimen_dec"]=PCA["specimen_dec"]
-    pars["specimen_inc"]=PCA["specimen_inc"]
-    pars["specimen_int_mad"]=PCA["specimen_mad"]
-    pars["specimen_int_dang"]=PCA["specimen_dang"]
-    #pars["specimen_int_ptrm_n"]=len(ptrm_check) # this is WRONG!
-    pars["specimen_int_ptrm_n"]=Nptrm
+        pars[md_key]=(100*dmax/vds)
+    else: pars[md_key]=-1
+    pars[min_key]=bstep
+    pars[max_key]=estep
+    pars[dec_key]=PCA["specimen_dec"]
+    pars[inc_key]=PCA["specimen_inc"]
+    pars[mad_key]=PCA["specimen_mad"]
+    pars[dang_key]=PCA["specimen_dang"]
+    pars[ptrm_key]=Nptrm
 # and the ThetaChecks
     if ThetaChecks!="":
         t=0
         for theta in ThetaChecks:
             if theta[0]>=bstep and theta[0]<=estep and theta[1]>t:t=theta[1]
-        pars['specimen_theta']=t
+        pars[theta_key]=t
     else:
-        pars['specimen_theta']=-1
+        pars[theta_key]=-1
 # and the DeltaChecks
     if DeltaChecks!="":
         d=0
         for delta in DeltaChecks:
             if delta[0]>=bstep and delta[0]<=estep and delta[1]>d:d=delta[1]
-        pars['specimen_delta']=d
+        pars[delta_key]
     else:
-        pars['specimen_delta']=-1
-    pars['specimen_gamma']=-1
+        pars[delta_key]=-1
+    pars[gamma_key]=-1
     if GammaChecks!="":
         for gamma in GammaChecks:
             if gamma[0]<=estep: pars['specimen_gamma']=gamma[1]
@@ -1875,11 +1986,11 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
     vector_diffs_segment=vector_diffs[zstart:zend]
     # FRAC calculation
     FRAC=sum(vector_diffs_segment)/vds
-    pars['specimen_frac']=FRAC
+    pars[frac_key]=FRAC
 
     # gap_max calculation
     max_FRAC_gap=max(vector_diffs_segment/sum(vector_diffs_segment))
-    pars['specimen_gmax']=max_FRAC_gap
+    pars[gmax_key]=max_FRAC_gap
 
 
     #---------------------------------------------------------------------
@@ -1891,7 +2002,7 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
     pars["fail_arai_beta_box_scatter"]=False # fail scat due to arai plot data points
     pars["fail_ptrm_beta_box_scatter"]=False # fail scat due to pTRM checks
     pars["fail_tail_beta_box_scatter"]=False # fail scat due to tail checks
-    pars["specimen_scat"]="1" # Pass by default
+    pars[scat_key]="1" # Pass by default
 
     #--------------------------------------------------------------
     # collect all Arai plot data points in arrays
@@ -1929,8 +2040,8 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
         # find the starting point of the pTRM check:
         for i in range(len(datablock)):
             rec=datablock[i]
-            if "LT-PTRM-I" in rec['magic_method_codes'] and float(rec['treatment_temp'])==ptrm_checks[k][0]:
-                starting_temperature=(float(datablock[i-1]['treatment_temp']))
+            if "LT-PTRM-I" in rec[meth_key] and float(rec[temp_key])==ptrm_checks[k][0]:
+                starting_temperature=(float(datablock[i-1][temp_key]))
                 try:
                     index=t_Arai.index(starting_temperature)
                     x_ptrm_check_starting_point.append(x_Arai[index])
@@ -1965,8 +2076,8 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
         # find the starting point of the pTRM check:
         for i in range(len(datablock)):
             rec=datablock[i]
-            if "LT-PTRM-MD" in rec['magic_method_codes'] and float(rec['treatment_temp'])==ptrm_tail[k][0]:
-                starting_temperature=(float(datablock[i-1]['treatment_temp']))
+            if "LT-PTRM-MD" in rec[meth_key] and float(rec[temp_key])==ptrm_tail[k][0]:
+                starting_temperature=(float(datablock[i-1][temp_key]))
                 try:
 
                     index=t_Arai.index(starting_temperature)
@@ -2005,7 +2116,7 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
 
     x_ptrm_check_for_SCAT,y_ptrm_check_for_SCAT=[],[]
     for k in range(len(ptrm_checks_temperatures)):
-      if ptrm_checks_temperatures[k] >= pars["measurement_step_min"] and ptrm_checks_starting_temperatures <= pars["measurement_step_max"] :
+      if ptrm_checks_temperatures[k] >= pars[min_key] and ptrm_checks_starting_temperatures <= pars[max_key] :
             x_ptrm_check_for_SCAT.append(x_ptrm_check[k])
             y_ptrm_check_for_SCAT.append(y_ptrm_check[k])
 
@@ -2020,7 +2131,7 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
     x_tail_check_for_SCAT,y_tail_check_for_SCAT=[],[]
 
     for k in range(len(tail_check_temperatures)):
-      if tail_check_temperatures[k] >= pars["measurement_step_min"] and tail_checks_starting_temperatures[k] <= pars["measurement_step_max"] :
+      if tail_check_temperatures[k] >= pars[min_key] and tail_checks_starting_temperatures[k] <= pars[max_key] :
             x_tail_check_for_SCAT.append(x_tail_check[k])
             y_tail_check_for_SCAT.append(y_tail_check[k])
 
@@ -2033,9 +2144,9 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
 
     # if threshold value for beta is not defined, then scat cannot be calculated (pass)
     # in this case, scat pass
-    if 'specimen_b_beta' in accept.keys() and accept['specimen_b_beta']!="":
-        b_beta_threshold=float(accept['specimen_b_beta'])
-        b=pars['specimen_b']             # best fit line
+    if beta_key in accept.keys() and accept[beta_key]!="":
+        b_beta_threshold=float(accept[beta_key])
+        b=pars[b_key]             # best fit line
         cm_x=mean(array(x_Arai_segment)) # x center of mass
         cm_y=mean(array(y_Arai_segment)) # y center of mass
         a=cm_y-b*cm_x
@@ -2125,9 +2236,9 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept):
         # check if specimen_scat is PASS or FAIL:
 
         if pars["fail_tail_beta_box_scatter"] or pars["fail_ptrm_beta_box_scatter"] or pars["fail_arai_beta_box_scatter"]:
-              pars["specimen_scat"]='0'
+              pars[scat_key]='0'
         else:
-              pars["specimen_scat"]='1'
+              pars[scat_key]='1'
 
     return pars,0
 
@@ -2902,10 +3013,52 @@ def fisher_by_pol(data):
             FisherByPoles[mode]=fpars
     return FisherByPoles
 
+def dolnp3_0(Data):
+    """
+    Desciption: takes a list of dicts with the controlled vocabulary of 3_0 and calls dolnp on them after reformating for compatibility.
+
+    @param: Data -> list of dicts that must contain "dir_dec","dir_inc","dir_tilt_correction",and "method_codes" in all dicts keys for this function to run
+    @return: ReturnData -> dict that is the fisher mean of the dicts passed in
+    @effects: prints to screen in case of no data
+    """
+
+    if len(Data) == 0:
+        print("This function requires input Data have at least 1 entry")
+        return {}
+    if len(Data) == 1:
+        ReturnData = {}
+        ReturnData["dec"]=Data[0]['dir_dec']
+        ReturnData["inc"]=Data[0]['dir_inc']
+        ReturnData["n"]='1'
+        if "DE-BFP" in Data[0]['method_codes']:
+            ReturnData["n_lines"]='0'
+            ReturnData["n_planes"]='1'
+        else:
+            ReturnData["n_planes"]='0'
+            ReturnData["n_lines"]='1'
+        ReturnData["alpha95"]=""
+        ReturnData["r"]=""
+        ReturnData["k"]=""
+        return ReturnData
+    else:
+        LnpData = []
+        for n,d in enumerate(Data):
+            LnpData.append({})
+            LnpData[n]['dec'] = d['dir_dec']
+            LnpData[n]['inc'] = d['dir_inc']
+            LnpData[n]['tilt_correction'] = d['dir_tilt_correction']
+            if 'method_codes' in d.keys():
+                if "DE-BFP" in d['method_codes']: LnpData[n]['dir_type'] = 'p'
+                else: LnpData[n]['dir_type'] = 'l'
+        ReturnData=pmag.dolnp(LnpData,'dir_type') # get a sample average from all specimens
+        return ReturnData
+
+
 def dolnp(data,direction_type_key):
     """
     returns fisher mean, a95 for data  using method of mcfadden and mcelhinny '88 for lines and planes
     """
+
     if "tilt_correction" in data[0].keys():
         tc=data[0]["tilt_correction"]
     else:
@@ -2918,16 +3071,47 @@ def dolnp(data,direction_type_key):
 # sort data  into lines and planes and collect cartesian coordinates
     for rec in data:
         cart=dir2cart([rec["dec"],rec["inc"]])[0]
-        if direction_type_key in rec.keys() and rec[direction_type_key]=='p': # this is a pole to a plane
-            n_planes+=1
-            L.append(cart) # this is the "EL, EM, EN" array of MM88
-        else: # this is a line
-            n_lines+=1
-            fdata.append([rec["dec"],rec["inc"],1.]) # collect data for fisher calculation
-            X.append(cart)
-            E[0]+=cart[0]
-            E[1]+=cart[1]
-            E[2]+=cart[2]
+        if direction_type_key in rec.keys():
+            if rec[direction_type_key]=='p': # this is a pole to a plane
+                n_planes+=1
+                L.append(cart) # this is the "EL, EM, EN" array of MM88
+            else: # this is a line
+                n_lines+=1
+                fdata.append([rec["dec"],rec["inc"],1.]) # collect data for fisher calculation
+                X.append(cart)
+                E[0]+=cart[0]
+                E[1]+=cart[1]
+                E[2]+=cart[2]
+        elif 'method_codes' in rec.keys():
+            if "DE-BFP" in rec['method_codes']: # this is a pole to a plane
+                n_planes+=1
+                L.append(cart) # this is the "EL, EM, EN" array of MM88
+            else: # this is a line
+                n_lines+=1
+                fdata.append([rec["dec"],rec["inc"],1.]) # collect data for fisher calculation
+                X.append(cart)
+                E[0]+=cart[0]
+                E[1]+=cart[1]
+                E[2]+=cart[2]
+        elif 'magic_method_codes' in rec.keys():
+            if "DE-BFP" in rec['magic_method_codes']: # this is a pole to a plane
+                n_planes+=1
+                L.append(cart) # this is the "EL, EM, EN" array of MM88
+            else: # this is a line
+                n_lines+=1
+                fdata.append([rec["dec"],rec["inc"],1.]) # collect data for fisher calculation
+                X.append(cart)
+                E[0]+=cart[0]
+                E[1]+=cart[1]
+                E[2]+=cart[2]
+        else:
+                #EVERYTHING IS A LINE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                n_lines+=1
+                fdata.append([rec["dec"],rec["inc"],1.]) # collect data for fisher calculation
+                X.append(cart)
+                E[0]+=cart[0]
+                E[1]+=cart[1]
+                E[2]+=cart[2]
 # set up initial points on the great circles
     V,XV=[],[]
     if n_planes !=0:
@@ -4778,17 +4962,29 @@ def cleanup(first_I,first_Z):
     return first_I,first_Z,cont
 #
 #
-def sortarai(datablock,s,Zdiff):
+def sortarai(datablock,s,Zdiff,**kwargs):
     """
      sorts data block in to first_Z, first_I, etc.
     """
+    if 'version' in kwargs.keys() and kwargs['version']==3:  
+        dec_key,inc_key='dir_dec','dir_inc'    
+        Mkeys=['magn_moment','magn_volume','magn_mass','magnitude']
+        meth_key='method_codes'
+        temp_key,dc_key='treat_temp','treat_dc_field'
+        dc_theta_key,dc_phi_key='treat_dc_field_theta','treat_dc_field_phi'
+        datablock=datablock.to_dict('records')  # convert dataframe to list of dictionaries
+    else:
+        dec_key,inc_key='measurement_dec','measurement_inc'
+        Mkeys=['measurement_magn_moment','measurement_magn_volume','measurement_magn_mass','measurement_magnitude']
+        meth_key='magic_method_codes'
+        temp_key,dc_key='treatment_temp','treatment_dc_field'
+        dc_theta_key,dc_phi_key='treatment_dc_field_theta','treatment_dc_field_phi'
     first_Z,first_I,zptrm_check,ptrm_check,ptrm_tail=[],[],[],[],[]
     field,phi,theta="","",""
     starthere=0
     Treat_I,Treat_Z,Treat_PZ,Treat_PI,Treat_M=[],[],[],[],[]
     ISteps,ZSteps,PISteps,PZSteps,MSteps=[],[],[],[],[]
     GammaChecks=[] # comparison of pTRM direction acquired and lab field
-    Mkeys=['measurement_magn_moment','measurement_magn_volume','measurement_magn_mass','measurement_magnitude']
     rec=datablock[0]
     for key in Mkeys:
         if key in rec.keys() and rec[key]!="":
@@ -4797,18 +4993,18 @@ def sortarai(datablock,s,Zdiff):
 # first find all the steps
     for k in range(len(datablock)):
 	rec=datablock[k]
-        temp=float(rec["treatment_temp"])
+        temp=float(rec[temp_key])
         methcodes=[]
-        tmp=rec["magic_method_codes"].split(":")
+        tmp=rec[meth_key].split(":")
         for meth in tmp:
             methcodes.append(meth.strip())
         if 'LT-T-I' in methcodes and 'LP-TRM' not in methcodes and 'LP-PI-TRM' in methcodes:
             Treat_I.append(temp)
             ISteps.append(k)
-            if field=="":field=float(rec["treatment_dc_field"])
+            if field=="":field=float(rec[dc_key])
             if phi=="":
-                phi=float(rec['treatment_dc_field_phi'])
-                theta=float(rec['treatment_dc_field_theta'])
+                phi=float(rec[dc_phi_key])
+                theta=float(rec[dc_theta_key])
 # stick  first zero field stuff into first_Z
         if 'LT-NO' in methcodes:
             Treat_Z.append(temp)
@@ -4826,8 +5022,8 @@ def sortarai(datablock,s,Zdiff):
             Treat_M.append(temp)
             MSteps.append(k)
         if 'LT-NO' in methcodes:
-            dec=float(rec["measurement_dec"])
-            inc=float(rec["measurement_inc"])
+            dec=float(rec[dec_key])
+            inc=float(rec[inc_key])
             str=float(rec[momkey])
             first_I.append([273,0.,0.,0.,1])
             first_Z.append([273,dec,inc,str,1])  # NRM step
@@ -4836,7 +5032,7 @@ def sortarai(datablock,s,Zdiff):
             istep=ISteps[Treat_I.index(temp)]
             irec=datablock[istep]
             methcodes=[]
-            tmp=irec["magic_method_codes"].split(":")
+            tmp=irec[meth_key].split(":")
             for meth in tmp: methcodes.append(meth.strip())
             brec=datablock[istep-1] # take last record as baseline to subtract
             zstep=ZSteps[Treat_Z.index(temp)]
@@ -4846,13 +5042,13 @@ def sortarai(datablock,s,Zdiff):
                 ZI=0
             else:
                 ZI=1
-            dec=float(zrec["measurement_dec"])
-            inc=float(zrec["measurement_inc"])
+            dec=float(zrec[dec_key])
+            inc=float(zrec[inc_key])
             str=float(zrec[momkey])
             first_Z.append([temp,dec,inc,str,ZI])
     # sort out first_I records
-            idec=float(irec["measurement_dec"])
-            iinc=float(irec["measurement_inc"])
+            idec=float(irec[dec_key])
+            iinc=float(irec[inc_key])
             istr=float(irec[momkey])
             X=dir2cart([idec,iinc,istr])
             BL=dir2cart([dec,inc,str])
@@ -4874,12 +5070,12 @@ def sortarai(datablock,s,Zdiff):
     for temp in Treat_PI: # look through infield steps and find matching Z step
         step=PISteps[Treat_PI.index(temp)]
         rec=datablock[step]
-        dec=float(rec["measurement_dec"])
-        inc=float(rec["measurement_inc"])
+        dec=float(rec[dec_key])
+        inc=float(rec[inc_key])
         str=float(rec[momkey])
         brec=datablock[step-1] # take last record as baseline to subtract
-        pdec=float(brec["measurement_dec"])
-        pinc=float(brec["measurement_inc"])
+        pdec=float(brec[dec_key])
+        pinc=float(brec[inc_key])
         pint=float(brec[momkey])
         X=dir2cart([dec,inc,str])
         prevX=dir2cart([pdec,pinc,pint])
@@ -4894,12 +5090,12 @@ def sortarai(datablock,s,Zdiff):
     for temp in Treat_PZ:
         step=PZSteps[Treat_PZ.index(temp)]
         rec=datablock[step]
-        dec=float(rec["measurement_dec"])
-        inc=float(rec["measurement_inc"])
+        dec=float(rec[dec_key])
+        inc=float(rec[inc_key])
         str=float(rec[momkey])
         brec=datablock[step-1]
-        pdec=float(brec["measurement_dec"])
-        pinc=float(brec["measurement_inc"])
+        pdec=float(brec[dec_key])
+        pinc=float(brec[inc_key])
         pint=float(brec[momkey])
         X=dir2cart([dec,inc,str])
         prevX=dir2cart([pdec,pinc,pint])
@@ -4911,14 +5107,10 @@ def sortarai(datablock,s,Zdiff):
     for temp in Treat_M:
         step=MSteps[Treat_M.index(temp)] # tail check step - just do a difference in magnitude!
         rec=datablock[step]
-#        dec=float(rec["measurement_dec"])
-#        inc=float(rec["measurement_inc"])
         str=float(rec[momkey])
         if temp in Treat_Z:
             step=ZSteps[Treat_Z.index(temp)]
             brec=datablock[step]
-#        pdec=float(brec["measurement_dec"])
-#        pinc=float(brec["measurement_inc"])
             pint=float(brec[momkey])
 #        X=dir2cart([dec,inc,str])
 #        prevX=dir2cart([pdec,pinc,pint])
@@ -8021,7 +8213,117 @@ def get_TS(ts):
     print "Time Scale Option Not Available"
     sys.exit()
 
-def initialize_acceptance_criteria ():
+def initialize_acceptance_criteria3_0 ():
+    """
+    initialize acceptance criteria with NULL criterion_values for thellier_gui and demag_gui
+
+    acceptance criteria format is a list of criteria dictionaries:
+        crit={}
+        crit['criterion']=
+        crit['criterion_operation']=
+        crit['criterion_value']=
+        crit['decimal_points']=
+
+   'criterion':
+       'DE-SPEC','DE-SAMP'..etc
+   'table_column':
+       MagIC table and column name
+   'criterion_value':
+        a number (for 'regular criteria')
+        a string (for 'flag')
+        1 for True (if criteria is boolean)
+        0 for False (if criteria is boolean)
+        -999 means N/A
+   'criterion_operation':
+       '>='for low threshold criterion_value
+       '<='for <= threshold criterion_value
+        [flag1,flag2]: for flags
+        '=' for boolean flags (can be 'g','b' or True/Flase or 1/0)
+        [column_name.string] 'contains' if column_name (e.g., method_codes) contains string  (e.g., DE-BFP)
+        'does not contain' if column_name does not contain string 
+   'decimal_points':
+       number of decimal points in rounding
+       (this is used in displaying criteria in the dialog box)
+       -999 means Exponent with 3 decimal points for floats and string for string
+    """
+
+    criteria=[]
+    # >=
+    for column in ['specimens.dir_n_measurements','samples.dir_n_specimens','samples.dir_n_specimens_lines','samples.dir_n_specimens_planes',\
+             'sites.dir_n_samples','sites.dir_n_samples_lines','sites.dir_n_samples_planes','sites.dir_k','sites.dir_r','sites.dir_alpha95'\
+              'specimens.int_n','specimens.int_f','specimens.int_fvds','specimens.int_frac','specimens.int_q','specimens.int_w','specimens.int_r2_corr','specimens.int_n_ptrm',\
+              'specimens.int_n_ptrm_tail','specimens.int_n_ac','samples.int_n','sites.int_n','sites.vadm_n_samples','sites.vdm_n_samples','sites.vgp_n_samples', 'sites.age_low']:
+        crit={}
+        crit['table_column']=column
+        crit['criterion_operation']=[">="]
+        crit['criterion_value']=0
+        crit['decimal_points']=0
+        criteria.append(crit)
+    # <=
+    for column in ['specimens.dir_mad_free','specimens.dir_dang','specimens.dir_alpha95','samples.dir_r','samples.dir_alpha95','samples.dir_k',\
+              'sites.dir_alpha95','sites.dir_k','specimens.int_b_sigma','specimens.int_b_beta','specimens.int_g','specimens.int_gmax','specimens.int_k','specimens.int_k_sse','specimens.int_k_prime','specimens.int_k_prime_sse',\
+              'specimens.int_rs_det','specimens.int_z','specimens.int_z_md','specimens.int_int_mad_free','specimens.int_mad_anc','specimens.int_alpha','specimens.int_alpha_prime',\
+               'specimens.int_theta','specimens.int_dang','specimens.int_crm','specimens.int_n_ptrm','specimens.int_dck','specimens.int_drat','specimens.int_maxdev','specimens.int_cdrat',\
+               'specimens.int_drats','specimens.int_mdrat','specimens.int_mdev','specimens.int_dpal','specimens.int_tail_drat','specimens.int_dtr','specimens.int_md','specimens.int_dt',\
+                'specimens.int_dac','specimens.int_gamma','samples.int_rel_sigma','samples.int_rel_sigma_perc','samples.int_sigma','samples.int_sigma_perc',\
+                'sites.int_rel_sigma','sites.int_rel_sigma_perc','sites.int_sigma','sites.int_sigma_perc','sites.vadm_sigma','sites.vdm_sigma'\
+                'sites.vgp_alpha95','sites.vgp_dm','sites.vgp_dp','sites.age_high','specimens.aniso_alt','specimens.aniso_ftest']:
+        crit={}
+        crit['table_column']=column
+        crit['criterion_operation']=["<="]
+        crit['criterion_value']=-999
+        crit['decimal_points']=0
+        criteria.append(crit)
+# WHAT ARE THESE - THEY ARE NOT IN DATA MODEL 3.0:   'samples.aniso_mean','sites.aniso_mean']: # criterion_value is in precent
+    # contains/does not contain
+    for column in ['method_codes.DE-BFP','method_codes.DE-BFL','method_codes.DE-FM']:
+        crit={}
+        crit['table_column']=column
+        crit['criterion_operation']=['contains','does not contain'] 
+        crit['criterion_value']=column.split('.')[-1]
+        crit['decimal_points']=0
+        criteria.append(crit)
+    # equals
+    for column in ['specimens.dir_polarity','samples.dir_polarity','sites.dir_polarity','sites.tilt_correction','specimens.int_scat','sites.age_unit']:
+        crit={}
+        crit['table_column']=column
+        crit['criterion_operation']=['=']
+        crit['decimal_points']=-999
+#
+# A little clean up here
+#
+    acceptance_criteria=[]
+    for crit in criteria:
+        criterion=""
+        if 'int_' in crit['table_column']: crit['criterion']='IE-'
+        if 'dir_' in column: criterion='DE-'
+        if 'specimens' in column: criterion=criterion+'SPEC'
+        if 'samples' in column: criterion=criterion+'SAMP'
+        if 'sites' in column: criterion=criterion+'SITE'
+        if 'polarity' in column: 
+            criterion='POLE'
+            crit['criterion_value']=['n','r','t','e','i']
+        if 'age' in column:
+            crit['criterion_value']=['Ga','Ka','Ma','Years AD (+/-)','Years BP','Years Cal AD (+/-)','Years Cal BP']
+        if 'scat' in column:
+            crit['criterion_value']=['true','false']
+        for c in ['alpha95','sigma_perc','vgp_dm','vdp_dp']:
+            crit['decimal_points']=1
+        for c in ['int_f','int_fvds','int_frac','int_q','int_gmax']:
+            if c in crit['table_column'].split('.')[-1]:  crit['decimal_points']=2
+        for c in ['int_b_sigma','int_b_beta','int_g','int_k', 'int_k_prime']:
+            if c in crit['table_column'].split('.')[-1]:  crit['decimal_points']=3
+        crit['criterion']=criterion
+        acceptance_criteria.append(crit)
+# initialize average_by_sample_or_site to site
+    crit={'criterion':'average_by_sample_or_site','criterion_operation':'+','criterion_value':-999,'description':'','table_column':'sites.int_abs'}
+    acceptance_criteria.append(crit)
+    #print 'PMAG1: ',acceptance_criteria
+    return(acceptance_criteria)
+
+
+
+def initialize_acceptance_criteria (**kwargs):
     '''
     initialize acceptance criteria with NULL values for thellier_gui and demag_gui
 
@@ -8049,7 +8351,7 @@ def initialize_acceptance_criteria ():
        'low'for low threshold value
        'high'for high threshold value
         [flag1.flag2]: for flags
-        'bool' for bollean flags (can be 'g','b' or True/Flase or 1/0)
+        'bool' for boolean flags (can be 'g','b' or True/Flase or 1/0)
    'decimal_points':
        number of decimal points in rounding
        (this is used in displaying criteria in the dialog box)
@@ -8501,9 +8803,9 @@ def initialize_acceptance_criteria ():
 
 
 
-def read_criteria_from_file(path,acceptance_criteria):
+def read_criteria_from_file(path,acceptance_criteria,**kwargs):
     '''
-    Read accceptance criteria from magic pmag_criteria file
+    Read accceptance criteria from magic criteria file
     # old format:
     multiple lines.  pmag_criteria_code defines the type of criteria
 
@@ -8537,8 +8839,12 @@ def read_criteria_from_file(path,acceptance_criteria):
 
     '''
     acceptance_criteria_list=acceptance_criteria.keys()
-    meas_data,file_type=magic_read(path)
-    for rec in meas_data:
+    if 'data_model' in kwargs.keys() and kwargs['data_model']==3:
+        crit_data=acceptance_criteria # data already read in
+        
+    else:
+        crit_data,file_type=magic_read(path)
+    for rec in crit_data:
         for crit in rec.keys():
             rec[crit]=rec[crit].strip('\n')
             if crit in ['pmag_criteria_code','criteria_definition','magic_experiment_names','er_citation_names']:
@@ -8558,7 +8864,7 @@ def read_criteria_from_file(path,acceptance_criteria):
                 # LJ add:
                 acceptance_criteria[crit]['category'] = None
 
-            # bollean flag
+            # boolean flag
             elif acceptance_criteria[crit]['threshold_type']=='bool':
                 if str(rec[crit]) in ['1','g','True','TRUE']:
                     acceptance_criteria[crit]['value']=True
@@ -8577,48 +8883,104 @@ def read_criteria_from_file(path,acceptance_criteria):
                 acceptance_criteria[crit]['value']=float(rec[crit])
     return(acceptance_criteria)
 
-def write_criteria_to_file(path,acceptance_criteria):
+def convert_data_models(direction,crit):
+    magic2 = ['specimen_coeff_det_sq', 'specimen_int_ptrm_tail_n', 'specimen_dpal', 'specimen_tail_drat', 'specimen_md', 'specimen_ac_n', 'specimen_dac',  'specimen_int_mad', 'specimen_int_ptrm_n', 'specimen_drat', 'specimen_z_md', 'specimen_frac', 'specimen_cdrat', 'specimen_dec', 'specimen_mdev', 'specimen_drats', 'specimen_z', 'specimen_maxdev', 'specimen_gmax', 'specimen_int_mad_anc', 'specimen_scat', 'specimen_r_sq', 'specimen_b_beta', 'specimen_dck', 'lab_dc_field', 'specimen_inc', 'specimen_mdrat', 'specimen_theta', 'specimen_ptrm', 'measurement_step_min', 'specimen_dtr', 'specimen_int_alpha', 'specimen_fvds', 'specimen_b_sigma', 'specimen_b', 'specimen_g', 'specimen_f', 'measurement_step_max', 'specimen_int_n', 'specimen_q', 'specimen_int_dang', 'specimen_k_sse', 'specimen_gamma', 'specimen_k', 'specimen_int_crm', 'specimen_dt', 'specimen_k_prime', 'specimen_k_prime_sse','sample_int_n','sample_int_sigma_perc','sample_int_sigma','site_int_n','site_int_sigma_perc','site_int_sigma','pmag_criteria_code']
+    magic3 = ['specimens.int_r2_det', 'specimens.int_n_ptrm_tail', 'specimens.int_dpal', 'specimens.int_drat_tail', 'specimens.int_md', 'specimens.int_n_ac', 'specimens.int_dac', 'specimens.int_mad', 'specimens.int_n_ptrm', 'specimens.int_drat', 'specimens.int_z_md', 'specimens.int_frac', 'specimens.int_cdrat', 'specimens.dir_dec', 'specimens.int_mdev', 'specimens.int_drats', 'specimens.int_z', 'specimens.int_maxdev', 'specimens.int_gmax', 'specimens.int_mad_anc', 'specimens.int_scat', 'specimens.int_r2_corr', 'specimens.int_b_beta', 'specimens.int_dck', 'specimens.treat_dc_field', 'specimens.dir_inc', 'specimens.int_mdrat', 'specimens.int_theta', 'specimens.int_ptrm', 'specimens.meas_step_min', 'specimens.int_dtr', 'specimens.int_alpha', 'specimens.int_fvds', 'specimens.int_b_sigma', 'specimens.int_b', 'specimens.int_g', 'specimens.int_f', 'specimens.meas_step_max', 'specimens.int_n_measurements', 'specimens.int_q', 'specimens.int_dang',  'specimens.int_k_sse', 'specimens.int_gamma', 'specimens.int_k', 'specimens.int_crm', 'specimens.int_dt', 'specimens.int_k_prime', 'specimens.int_k_prime_sse','samples.int_n_specimens','samples.int_sigma_perc','samples.int_sigma','sites.int_n_specimens','sites.int_sigma_perc','sites.int_sigma','criterion']
+    if direction=='magic2':
+        if crit in magic3:
+            return magic2[magic3.index(crit)]
+        else:
+            return crit
+    else:
+        if crit in magic2:
+            return magic3[magic2.index(crit)]
+        else:
+            return crit
+
+
+ 
+
+
+def write_criteria_to_file(path,acceptance_criteria,**kwargs):
     crit_list=acceptance_criteria.keys()
     crit_list.sort()
+    if 'data_model' in kwargs.keys() and kwargs['data_model']==3:
+        criteria_file='criteria.txt'
+        code_key='criterion'
+        definition_key='definition'
+        citation_key='citations'
+    else:
+        criteria_file='pmag_criteria.txt'
+        code_key='pmag_criteria_code'
+        definition_key='criteria_definition'
+        citation_key='er_citation_names'
+    recs=[] # data_model 3 has a list of dictionaries, data_model 2.5 has just one record   
     rec={}
-    rec['pmag_criteria_code']="ACCEPT"
-    rec['criteria_definition']="acceptance criteria for study"
-    rec['er_citation_names']="This study"
-
+    rec[code_key]="ACCEPT"
+    rec[definition_key]="acceptance criteria for study"
+    rec[citation_key]="This study"
     for crit in crit_list:
-        # ignore criteria that are not in MagIc model 2.5
         if 'category' in acceptance_criteria[crit].keys():
-            if acceptance_criteria[crit]['category']=='thellier_gui':
-                continue
+        # ignore criteria that are not in MagIc model 2.5 or 3.0
+          if acceptance_criteria[crit]['category']!='thellier_gui':
+            if 'data_model' in kwargs.keys() and kwargs['data_model']==3: # need to make a list of these dictionaries
+                rec={}
+                rec[definition_key]="acceptance criteria for study"
+                rec[citation_key]="This study"
+                rec[code_key]="IE-SPEC"
+                if 'sample' in crit:
+                    rec[code_key]="IE-SAMP"
+                if 'site' in crit:
+                    rec[code_key]="IE-SITE"
+                rec[definition_key]="acceptance criteria for study"
+                rec[citation_key]="This study"
+                crit3_0=convert_data_models('magic3',crit)
+                rec['table_column']=crit3_0
+                if acceptance_criteria[crit]['threshold_type']=='low':
+                    op='>='
+                elif acceptance_criteria[crit]['threshold_type']=='high':
+                    op='<='
+                elif acceptance_criteria[crit]['threshold_type']=='bool':
+                    op='='
+                else:
+                    op='?'
+                rec['criterion_operation']=op
+                value_key='criterion_value'
+            else:
+                value_key=crit
 
         # fix True/False typoes
-        if type(acceptance_criteria[crit]['value'])==str:
-            if acceptance_criteria[crit]['value']=="TRUE":
-                 acceptance_criteria[crit]['value']="True"
-            if acceptance_criteria[crit]['value']=="FALSE":
-                 acceptance_criteria[crit]['value']="False"
-
-        if type(acceptance_criteria[crit]['value'])==str:
-            if acceptance_criteria[crit]['value'] != "-999" and acceptance_criteria[crit]['value'] != "":
-
-                rec[crit]=acceptance_criteria[crit]['value']
-        elif type(acceptance_criteria[crit]['value'])==int:
-            if acceptance_criteria[crit]['value'] !=-999:
-                rec[crit]="%.i"%(acceptance_criteria[crit]['value'])
-        elif type(acceptance_criteria[crit]['value'])==float:
-            if float(acceptance_criteria[crit]['value'])==-999:
-                continue
-            decimal_points=acceptance_criteria[crit]['decimal_points']
-            if decimal_points != -999:
-                command="rec[crit]='%%.%sf'%%(acceptance_criteria[crit]['value'])"%(decimal_points)
-                exec command
+            if type(acceptance_criteria[crit]["value"])==str:
+                if acceptance_criteria[crit]["value"]=="TRUE":
+                     acceptance_criteria[crit]["value"]="True"
+                if acceptance_criteria[crit]["value"]=="FALSE":
+                     acceptance_criteria[crit]["value"]="False"
+            if type(acceptance_criteria[crit]["value"])==str:
+                if acceptance_criteria[crit]["value"] != "-999" and acceptance_criteria[crit]['value'] != "":
+                    rec[value_key]=acceptance_criteria[crit]['value']
+            elif type(acceptance_criteria[crit]["value"])==int:
+                if acceptance_criteria[crit]["value"] !=-999:
+                    rec[value_key]="%.i"%(acceptance_criteria[crit]["value"])
+                elif type(acceptance_criteria[crit]["value"])==float:
+                    if float(acceptance_criteria[crit]["value"])==-999:
+                        continue
+            if 'decimal_points' in acceptance_criteria[crit] in acceptance_criteria[crit].keys():
+                decimal_points=acceptance_criteria[crit]['decimal_points']
+                if decimal_points != -999:
+                    command="rec[value_key]='%%.%sf'%%(acceptance_criteria[crit]['value'])"%(decimal_points)
+                    exec command
             else:
-                rec[crit]="%e"%(acceptance_criteria[crit]['value'])
-        elif type(acceptance_criteria[crit]['value'])==bool:
-                rec[crit]=str(acceptance_criteria[crit]['value'])
-        else:
-            print "-W- WARNING: statistic %s not written to file:",acceptance_criteria[crit]['value']
-    magic_write(path,[rec],"pmag_criteria")
+                rec[value_key]=str(acceptance_criteria[crit]["value"])
+            if type(acceptance_criteria[crit]["value"])==bool:
+                rec[value_key]=str(acceptance_criteria[crit]["value"])
+            if 'data_model' in kwargs.keys() and kwargs['data_model']==3: # need to make a list of these dictionaries
+                if eval(rec[value_key])!=-999: recs.append(rec)
+          else:
+              print "-W- WARNING: statistic %s not written to file:",crit
+    if 'data_model' in kwargs.keys() and kwargs['data_model']==3: # need to make a list of these dictionaries
+        magic_write(path,recs,'criteria')
+    else: 
+        magic_write(path,[rec],'pmag_criteria')
 
 
 
@@ -8648,11 +9010,11 @@ def get_named_arg_from_sys(name, default_val=None, reqd=False):
         raise MissingCommandLineArgException(name)
     return default_val # if arg is not provided but has a default value, return that value
 
-def get_flag_arg_from_sys(name):
+def get_flag_arg_from_sys(name, true=True, false=False):
     if name in sys.argv:
-        return True
+        return true
     else:
-        return False
+        return false
 
 
 def merge_recs_headers(recs):
