@@ -1,5 +1,8 @@
 import pmag
 import pmagplotlib
+import data_model3 as data_model
+from new_builder import Contribution
+import validate_upload3 as val_up3
 import copy
 import numpy as np
 import random
@@ -13,6 +16,7 @@ import math
 #from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
 #from matplotlib.backends.backend_wx import NavigationToolbar2Wx
 from matplotlib.figure import Figure
+import SPD.mapping.map_magic as map_magic
 
 
 def igrf(input_list):
@@ -2496,7 +2500,7 @@ def upload_magic(concat=0, dir_path='.', data_model=None):
 
 
     if os.path.isfile(up):
-        import validate_upload
+        import validate_upload2 as validate_upload
         validated = False
         validated, errors = validate_upload.read_upload(up, data_model)
 
@@ -2527,6 +2531,149 @@ def upload_magic(concat=0, dir_path='.', data_model=None):
         print "-W- validation of upload file has failed.\nPlease fix above errors and try again.\nYou may run into problems if you try to upload this file to the MagIC database"
         return False, "file validation has failed.  You may run into problems if you try to upload this file.", errors
     return new_up, '', None
+
+def upload_magic3(concat=0, dir_path='.', dmodel=None, vocab=""):
+    """
+    Finds all magic files in a given directory,
+    and compiles them into an upload.txt file
+    which can be uploaded into the MagIC database.
+    returns a tuple of either: (False, error_message, errors)
+    if there was a problem creating/validating the upload file
+    or: (filename, '', None) if the file creation was fully successful.
+    """
+    locations = []
+    concat = int(concat)
+    dtypes = ["locations", "samples", "specimens", "sites", "ages", "measurements",
+                  "criteria", "contribution", "images"]
+    file_names = [os.path.join(dir_path, dtype + ".txt") for dtype in dtypes]
+    con = Contribution(dir_path, vocabulary=vocab)
+    # begin the upload process
+    up = os.path.join(dir_path, "upload.txt")
+    if os.path.exists(up):
+        os.remove(up)
+    RmKeys = ['citation_label', 'compilation', 'calculation_type', 'average_n_lines', 'average_n_planes',
+              'specimen_grade', 'site_vgp_lat', 'site_vgp_lon', 'direction_type', 'specimen_Z',
+              'magic_instrument_codes', 'cooling_rate_corr', 'cooling_rate_mcd', 'anisotropy_atrm_alt',
+              'anisotropy_apar_perc', 'anisotropy_F', 'anisotropy_F_crit', 'specimen_scat',
+              'specimen_gmax','specimen_frac', 'site_vadm', 'site_lon', 'site_vdm', 'site_lat',
+              'measurement_chi', 'specimen_k_prime','specimen_k_prime_sse','external_database_names',
+              'external_database_ids', 'Further Notes', 'Typology', 'Notes (Year/Area/Locus/Level)',
+              'Site', 'Object Number']
+    print "-I- Removing: ", RmKeys
+    last = file_names[-1]
+    first_file = 1
+    failing = []
+    all_failing_items = {}
+    if not dmodel:
+        dmodel = data_model.DataModel()
+    for file_type in dtypes:
+        print "-"
+    # read in the data
+        #Data, file_type = pmag.magic_read(File)
+        if file_type not in con.tables.keys():
+            print "-I- No {} file found, continuing".format(file_type)
+            continue
+        container = con.tables[file_type]
+        df = container.df
+        if len(df):
+            print "-I- {} file successfully read in".format(file_type)
+    # make some adjustments to clean up data
+            # drop non MagIC keys
+            DropKeys = set(RmKeys).intersection(df.columns)
+            df.drop(DropKeys, axis=1, inplace=True)
+            # make sure int_b_beta is positive
+            if 'int_b_beta' in df.columns:
+                df['int_b_beta'] = df['int_b_beta'].astype(float).apply(abs)
+            # make all declinations/azimuths/longitudes in range 0=>360.
+            relevant_cols = val_up3.get_degree_cols(df)
+            for col in relevant_cols:
+                df[col] = df[col].apply(pmag.adjust_val_to_360)
+            # get list of location names
+            if file_type == 'locations':
+                locations = sorted(df['location'].unique())
+            # LJ: need to deal with this
+            # use only highest priority orientation -- not sure how this works
+            elif file_type == 'samples':
+                #orient,az_type=pmag.get_orient(Data,rec['sample'])
+                pass
+            # include only specimen records with samples
+            elif file_type == 'specimens':
+                df = df[df['sample'].notnull()]
+                if 'samples' in con.tables:
+                    samp_df = con.tables['samples'].df
+                    df = df[df['sample'].isin(samp_df.index.unique())]
+            # include only measurements with specmiens
+            elif file_type == 'measurements':
+                df = df[df['specimen'].notnull()]
+                if 'specimens' in con.tables:
+                    spec_df = con.tables['specimens'].df
+                    df = df[df['specimen'].isin(spec_df.index.unique())]
+    # run validations
+            res = val_up3.validate_table(con, file_type)#, verbose=True)
+            if res:
+                dtype, bad_rows, bad_cols, missing_cols, missing_groups, failing_items = res
+                if dtype not in all_failing_items:
+                    all_failing_items[dtype] = {}
+                all_failing_items[dtype]["rows"] = failing_items
+                all_failing_items[dtype]["missing_columns"] = missing_cols
+                all_failing_items[dtype]["missing_groups"] = missing_groups
+                failing.append(dtype)
+    # write out the data
+            if len(df):
+                container.write_magic_file(up, append=True)
+    # write out the file separator
+            f = open(up, 'a')
+            f.write('>>>>>>>>>>\n')
+            f.close()
+            print "-I-", file_type, 'written to ',up
+        else:
+            #print 'File:', File
+            print file_type, 'is bad or non-existent - skipping '
+    ## add to existing file
+    if concat == 1:
+        f = open(up, 'a')
+        f.write('>>>>>>>>>>\n')
+        f.close()
+
+    if not os.path.isfile(up):
+        print "no data found, upload file not created"
+        return False, "no data found, upload file not created", None
+
+    #rename upload.txt according to location + timestamp
+    format_string = "%d.%b.%Y"
+    if locations:
+        locs = set(locations)
+        locs = sorted(locs)[:3]
+        #location = locations[0].replace(' ', '_')
+        locs = [loc.replace(' ', '-') for loc in locs]
+        location = "_".join(locs)
+        new_up = location + '_' + time.strftime(format_string) + '.txt'
+    else:
+        new_up = 'unknown_location_' + time.strftime(format_string) + '.txt'
+
+    new_up = os.path.join(dir_path, new_up)
+    if os.path.isfile(new_up):
+        fname, extension = os.path.splitext(new_up)
+        for i in range(1, 100):
+            if os.path.isfile(fname + "_" + str(i) + extension):
+                continue
+            else:
+                new_up = fname + "_" + str(i) + extension
+                break
+    if not up:
+        print "-W- Could not create an upload file"
+        return False, "Could not create an upload file", None, None
+    os.rename(up, new_up)
+    print "Finished preparing upload file: {} ".format(new_up)
+    if failing:
+        print "-W- validation of upload file has failed."
+        print "These tables have errors: {}".format(", ".join(failing))
+        print "Please fix above errors and try again."
+        print "You may run into problems if you try to upload this file to the MagIC database."
+        return False, "file validation has failed.  You may run into problems if you try to upload this file.", failing, all_failing_items
+    else:
+        print "-I- Your file has passed validation.  You should be able to upload it to the MagIC database without trouble!"
+    return new_up, '', None, None
 
 
 def specimens_results_magic(infile='pmag_specimens.txt', measfile='magic_measurements.txt', sampfile='er_samples.txt', sitefile='er_sites.txt', agefile='er_ages.txt', specout='er_specimens.txt', sampout='pmag_samples.txt', siteout='pmag_sites.txt', resout='pmag_results.txt', critout='pmag_criteria.txt', instout='magic_instruments.txt', plotsites = False, fmt='svg', dir_path='.', cors=[], priorities=['DA-AC-ARM','DA-AC-TRM'], coord='g', user='', vgps_level='site', do_site_intensity=True, DefaultAge=["none"], avg_directions_by_sample=False, avg_intensities_by_sample=False, avg_all_components=False, avg_by_polarity=False, skip_directions=False, skip_intensities=False, use_sample_latitude=False, use_paleolatitude=False, use_criteria='default'):
@@ -3117,7 +3264,10 @@ def specimens_results_magic(infile='pmag_specimens.txt', measfile='magic_measure
     else: print "No Results level table"
 
 
-def orientation_magic(or_con=1, dec_correction_con=1, dec_correction=0, bed_correction=True, samp_con='1', hours_from_gmt=0, method_codes='', average_bedding=False, orient_file='orient.txt', samp_file='er_samples.txt', site_file='er_sites.txt', output_dir_path='.', input_dir_path='.', append=False):
+def orientation_magic(or_con=1, dec_correction_con=1, dec_correction=0, bed_correction=True,
+                      samp_con='1', hours_from_gmt=0, method_codes='', average_bedding=False,
+                      orient_file='orient.txt', samp_file='er_samples.txt', site_file='er_sites.txt',
+                      output_dir_path='.', input_dir_path='.', append=False, data_model=2):
     """
     use this function to convert tab delimited field notebook information to MagIC formatted tables (er_samples and er_sites)
 
@@ -3213,12 +3363,21 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
     sclass,lithology,sample_type="","",""
     newclass,newlith,newtype='','',''
     BPs=[]# bedding pole declinations, bedding pole inclinations
+    image_file = "er_images.txt"
     #
-    #
+    # use 3.0. default filenames when in 3.0.
+    # but, still allow for custom names
+    data_model = int(data_model)
+    if data_model == 3:
+        if samp_file == "er_samples.txt":
+            samp_file = "samples.txt"
+        if site_file == "er_sites.txt":
+            site_file = "sites.txt"
+        image_file = "images.txt"
     orient_file = os.path.join(input_dir_path,orient_file)
     samp_file = os.path.join(output_dir_path,samp_file)
     site_file = os.path.join(output_dir_path, site_file)
-    image_file= os.path.join(output_dir_path, "er_images.txt")
+    image_file= os.path.join(output_dir_path, image_file)
 
     # validate input
     if '4' in samp_con[0]:
@@ -3237,22 +3396,44 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
         raise Exception("If using magnetic declination convention 2, you must also provide a declincation correction in degrees")
 
     SampRecs,SiteRecs,ImageRecs=[],[],[]
+    SampRecs_sorted, SiteRecs_sorted = {}, {}
 
     if append:
         try:
             SampRecs,file_type=pmag.magic_read(samp_file)
+            # convert 3.0. sample file to 2.5 format
+            if data_model == 3:
+                SampRecs3 = SampRecs
+                SampRecs = []
+                for samp_rec in SampRecs3:
+                    rec = map_magic.mapping(samp_rec, map_magic.samp_magic3_2_magic2_map)
+                    SampRecs.append(rec)
             SampRecs_sorted=pmag.sort_magic_data(SampRecs,'er_sample_name') # magic_data dictionary sorted by sample_name
             print 'sample data to be appended to: ', samp_file
-        except:
+        except Exception as ex:
+            print ex
             print 'problem with existing file: ',samp_file, ' will create new.'
         try:
             SiteRecs,file_type=pmag.magic_read(site_file)
+            # convert 3.0. site file to 2.5 format
+            if data_model == 3:
+                SiteRecs3 = SiteRecs
+                SiteRecs = []
+                for site_rec in SiteRecs3:
+                    SiteRecs.append(map_magic.mapping(site_rec, map_magic.site_magic3_2_magic2_map))
             SiteRecs_sorted=pmag.sort_magic_data(SiteRecs,'er_site_name') # magic_data dictionary sorted by site_name
             print 'site data to be appended to: ',site_file
-        except:
+        except Exception as ex:
+            print ex
             print 'problem with existing file: ',site_file,' will create new.'
         try:
             ImageRecs,file_type=pmag.magic_read(image_file)
+            # convert from 3.0. --> 2.5
+            if data_model == 3:
+                ImageRecs3 = ImageRecs
+                ImageRecs = []
+                for image_rec in ImageRecs3:
+                    ImageRecs.append(map_magic.mapping(image_rec, map_magic.image_magic3_2_magic2_map))
             print 'image data to be appended to: ',image_file
         except:
             print 'problem with existing file: ',image_file,' will create new.'
@@ -3265,6 +3446,8 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
     #
     # step through the data sample by sample
     #
+    # use map_magic in here...
+
     for OrRec in OrData:
         if 'mag_azimuth' not in OrRec.keys():
             OrRec['mag_azimuth']=""
@@ -3311,13 +3494,12 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
             if 'method_codes' in OrRec.keys() and OrRec['method_codes'].strip()!="":
                 methcodes=OrRec['method_codes'] # add notes
         codes=methcodes.replace(" ","").split(":")
-        
         sample_name=OrRec["sample_name"]
         # patch added by rshaar 7/2016
         # if sample_name already exists in er_samples.txt:
         # merge the new data colmuns calculated by orientation_magic with the existing data colmuns
         # this is done to make sure no previous data in er_samples.txt and er_sites.txt is lost.
-        
+
         if sample_name in SampRecs_sorted.keys():
             Prev_MagRec=SampRecs_sorted[sample_name][-1]
             MagRec=Prev_MagRec
@@ -3325,7 +3507,7 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
             Prev_MagRec={}
             MagRec={}
         MagRec["er_citation_names"]="This study"
-        
+
         # the following keys were calculated or defined in the code above:
         for key in ['sample_igsn','sample_texture','sample_cooling_rate','cooling_rate_corr','cooling_rate_mcd','participantlist']:
             command= "var= %s"%key
@@ -3361,10 +3543,10 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
             elif  key  in  Prev_MagRec.keys() and  Prev_MagRec[key]!= "" and  Prev_MagRec[key]!= "Not Specified" :
                 MagRec[key]=Prev_MagRec[key]
             else:
-                MagRec[key]="Not Specified" 
+                MagRec[key]="Not Specified"
 
 
-        # (rshaar) From here parse new information and replace previous, if exists:                                                                                                                            
+        # (rshaar) From here parse new information and replace previous, if exists:
     #
     # parse information common to all orientation methods
     #
@@ -3532,7 +3714,7 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
             # if sample_name already exists in er_samples.txt:
             # merge the new data colmuns calculated by orientation_magic with the existing data colmuns
             # this is done to make sure no previous data in er_samples.txt and er_sites.txt is lost.
-            
+
             if site in SiteRecs_sorted.keys():
                 Prev_MagRec=SiteRecs_sorted[site][-1]
                 SiteRec=Prev_MagRec
@@ -3542,7 +3724,7 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
             SiteRec["er_citation_names"]="This study"
             SiteRec["er_site_name"]=site
             SiteRec["site_definition"]="s"
-    
+
             for key in ["er_location_name"]:
                 if key in Prev_MagRec.keys() and Prev_MagRec[key]!="":
                     SiteRec[key]=Prev_MagRec[key]
@@ -3554,8 +3736,8 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
                     SiteRec["site_"+key]=Prev_MagRec["site_"+key]
                 else:
                     SiteRec["site_"+key]=MagRec["sample_"+key]
-                    
-                                                                                                                                                
+
+
             #SiteRec["site_lat"]=MagRec["sample_lat"]
             #SiteRec["site_lon"]=MagRec["sample_lon"]
             #SiteRec["site_height"]=MagRec["sample_height"]
@@ -3687,16 +3869,35 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
     print 'saving data...'
     SampsOut,keys=pmag.fillkeys(Samps)
     Sites,keys=pmag.fillkeys(SiteOuts)
-    wrote_samps = pmag.magic_write(samp_file,SampsOut,"er_samples")
-    wrote_sites = pmag.magic_write(site_file,Sites,"er_sites")
+    if data_model == 3:
+        SampsOut3 = []
+        Sites3 = []
+        for samp_rec in SampsOut:
+            SampsOut3.append(map_magic.mapping(samp_rec, map_magic.samp_magic2_2_magic3_map))
+        for site_rec in Sites:
+            Sites3.append(map_magic.mapping(site_rec, map_magic.site_magic2_2_magic3_map))
+        wrote_samps = pmag.magic_write(samp_file,SampsOut3,"samples")
+        wrote_sites = pmag.magic_write(site_file,Sites3,"sites")
+    else:
+        wrote_samps = pmag.magic_write(samp_file,SampsOut,"er_samples")
+        wrote_sites = pmag.magic_write(site_file,Sites,"er_sites")
     if wrote_samps:
         print "Data saved in ", samp_file,' and ',site_file
     else:
         print "No data found"
     if len(ImageOuts)>0:
+        # need to do conversion here 3.0. --> 2.5
         Images,keys=pmag.fillkeys(ImageOuts)
-        pmag.magic_write(image_file,Images,"er_images")
-        print "Image info saved in ",image_file
+        image_type = "er_images"
+        if data_model == 3:
+            # convert 2.5 --> 3.0.
+            image_type = "images"
+            Images2 = Images
+            Images = []
+            for image_rec in Images2:
+                Images.append(map_magic.mapping(image_rec, map_magic.image_magic2_2_magic3_map))
+        pmag.magic_write(image_file, Images, image_type)
+        print "Image info saved in ", image_file
     return True, None
 
 

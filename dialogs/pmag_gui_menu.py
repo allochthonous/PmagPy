@@ -7,7 +7,7 @@ Create Pmag GUI menubar
 import wx
 import pmag_widgets as pw
 import pmag_menu_dialogs
-import pmagpy.builder as builder
+import pmagpy.builder2 as builder
 
 
 class MagICMenu(wx.MenuBar):
@@ -50,7 +50,7 @@ class MagICMenu(wx.MenuBar):
             parent.Bind(wx.EVT_MENU, pw.on_hide_output, help_hide)
 
         import_menu = wx.Menu()
-            
+
         orient_submenu = wx.Menu()
         orient2 = orient_submenu.Append(-1, 'AzDip format')
         #orient3 = orient_submenu.Append(-1, "IODP Core Summary csv file")
@@ -138,7 +138,7 @@ class MagICMenu(wx.MenuBar):
         self.Append(import_menu, 'Import')
         self.Append(export_menu, 'Export')
         self.Append(analysis_menu, 'Analysis and Plots') # probably won't use this
-        
+
 
 
     def on_quit(self, event):
@@ -173,7 +173,7 @@ class MagICMenu(wx.MenuBar):
 
     def on_export_results(self, event):
         pmag_menu_dialogs.ExportResults(self.parent, self.parent.WD)
-        
+
     def orient_import2(self, event):
         """
         initialize window to import an AzDip format file into the working directory
@@ -194,7 +194,7 @@ class MagICMenu(wx.MenuBar):
 
     def anisotropy_import2(self, event):
         pmag_menu_dialogs.ImportK15(self.parent, self.parent.WD)
-        
+
     def anisotropy_import3(self, event):
         pmag_menu_dialogs.ImportSufarAscii(self.parent, self.parent.WD)
 

@@ -30,24 +30,24 @@ def sort_diclist(undecorated,sort_on):
 
 
 def get_dictitem(In,k,v,flag):
-    """ returns a list of dictionaries from list In with key,k  = value, v . CASE INSENSITIVE # allowed keywords:"""
-    try:
-        if flag=="T":return [dictionary for dictionary in In if dictionary[k].lower()==v.lower()] # return that which is
-        if flag=="F":
-            return [dictionary for dictionary in In if dictionary[k].lower()!=v.lower()] # return that which is not
-        if flag=="has":return [dictionary for dictionary in In if v.lower() in dictionary[k].lower()] # return that which is contained
-        if flag=="not":return [dictionary for dictionary in In if v.lower() not in dictionary[k].lower()] # return that which is not contained
-        if flag=="eval":
-            A=[dictionary for dictionary in In if dictionary[k]!=''] # find records with no blank values for key
-            return [dictionary for dictionary in A if float(dictionary[k])==float(v)] # return that which is
-        if flag=="min":
-            A=[dictionary for dictionary in In if dictionary[k]!=''] # find records with no blank values for key
-            return [dictionary for dictionary in A if float(dictionary[k])>=float(v)] # return that which is greater than
-        if flag=="max":
-            A=[dictionary for dictionary in In if dictionary[k]!=''] # find records with no blank values for key
-            return [dictionary for dictionary in A if float(dictionary[k])<=float(v)] # return that which is less than
-    except Exception, err:
-        return []
+    """ returns a list of dictionaries from list In with key,k  = value, v . CASE INSENSITIVE # allowed keywords:
+        requires that the value of k in the dictionaries contained in In be castable to string and requires that v be castable to a string if flag is T,F
+        ,has or not and requires they be castable to float if flag is eval, min, or max.
+    """
+    if flag=="T":return [dictionary for dictionary in In if k in dictionary.keys() and str(dictionary[k]).lower()==str(v).lower()] # return that which is
+    if flag=="F":
+        return [dictionary for dictionary in In if k in dictionary.keys() and str(dictionary[k]).lower()!=str(v).lower()] # return that which is not
+    if flag=="has":return [dictionary for dictionary in In if k in dictionary.keys() and str(v).lower() in str(dictionary[k]).lower()] # return that which is contained
+    if flag=="not":return [dictionary for dictionary in In if k in dictionary.keys() and str(v).lower() not in str(dictionary[k]).lower()] # return that which is not contained
+    if flag=="eval":
+        A=[dictionary for dictionary in In if k in dictionary.keys() and dictionary[k]!=''] # find records with no blank values for key
+        return [dictionary for dictionary in A if k in dictionary.keys() and float(dictionary[k])==float(v)] # return that which is
+    if flag=="min":
+        A=[dictionary for dictionary in In if k in dictionary.keys() and dictionary[k]!=''] # find records with no blank values for key
+        return [dictionary for dictionary in A if k in dictionary.keys() and float(dictionary[k])>=float(v)] # return that which is greater than
+    if flag=="max":
+        A=[dictionary for dictionary in In if k in dictionary.keys() and  dictionary[k]!=''] # find records with no blank values for key
+        return [dictionary for dictionary in A if k in dictionary.keys() and float(dictionary[k])<=float(v)] # return that which is less than
 
 def get_dictkey(In,k,dtype):
     """
@@ -219,9 +219,129 @@ def convert_ages(Recs):
             print 'no age key:', rec
     return New
 
-def getsampVGP(SampRec,SiteNFO):
-    site=get_dictitem(SiteNFO,'er_site_name',SampRec['er_site_name'],'T')
-    try:
+def convert_meas_2_to_3(meas_data_2):
+    NewMeas=[]
+# step through records
+    for rec in data2: NewMeas.append(map_magic.convert_meas('magic3',rec))
+    return NewMeas
+
+
+def convert2_3(fname, input_dir=".", output_dir="."):
+    full_name = os.path.join(input_dir, fname)
+    if not os.path.exists(full_name):
+        print "-W- {} is not a file".format(full_name)
+        return
+    # read in data model 2.5 measurements file
+    data2, filetype = magic_read(full_name)
+    # utility function for converting a dictionary
+    def flip_dict(dictionary):
+        newdict = {}
+        for key in dictionary:
+            val = dictionary[key]
+            newdict[val] = key
+        return newdict
+    # conversion dicts
+    spec3_spec2={'int_drats': 'specimen_drats', 'site': 'er_site_name', 'int_mad': 'specimen_int_mad',
+             'sample': 'er_sample_name', 'measurement_step_max': 'meas_step_max',
+             'specimen_n': 'dir_n_measurements', 'int_n_measurements': 'specimen_int_n',
+             'int_corr': 'specimen_correction', 'int_rsc': 'specimen_rsc',
+             'analyst_names': 'er_analyst_mail_names', 'int_scat': 'specimen_scat',
+             'int_ptrm_n': 'specimen_int_ptrm_n', 'citations': 'er_citation_names',
+             'int_gmax': 'specimen_gmax', 'int_dang': 'specimen_int_dang',
+             'dir_tilt_correction': 'specimen_tilt_correction', 'location': 'er_location_name',
+             'dir_comp': 'specimen_comp_name', 'specimen_magn_moment': 'magn_moment',
+             'int_w': 'specimen_w', 'specimen': 'er_specimen_name', 'int_q': 'specimen_q',
+             'int_fvds': 'specimen_fvds', 'specimen_mad': 'dir_mad_free',
+             'int_frac': 'specimen_frac', 'meas_step_min': 'measurement_step_min',
+             'int_f': 'specimen_f', 'software_packages': 'magic_software_packages',
+             'dir_mad_free': 'specimen_mad', 'magn_moment': 'specimen_magn_moment',
+             'instrument_codes': 'magic_instrument_codes', 'int_b_beta': 'specimen_b_beta',
+             'dir_n_comps': 'specimen_comp_n', 'int_md': 'specimen_md',
+             'dir_n_measurements': 'specimen_n', 'dir_inc': 'specimen_inc',
+             'specimen_magn_volumn': 'magn_volumn', 'meas_step_max': 'measurement_step_max',
+             'dir_alpha95': 'specimen_alpha95', 'magn_volumne': 'specimen_magn_volumn',
+             'measurement_step_min': 'meas_step_min', 'meas_step_unit': 'measurement_step_unit',
+             'dir_dec': 'specimen_dec', 'method_codes': 'magic_method_codes',
+             'result_quality': 'specimen_flag', 'dir_dang': 'specimen_dang'}
+    site3_site2 = {'int_abs_sigma' : 'site_int_sigma', 'int_abs_sigma_perc' : 'site_int_sigma_perc',
+                   'int_n_samples' : 'site_int_n', 'dir_alpha95' : 'site_alpha95', 'dir_k' : 'site_k',
+                   'dir_n_samples' : 'site_n', 'dir_n_specimens_lines' : 'site_n_lines',
+                   'dir_n_specimens_planes' : 'site_n_planes', 'dir_r' : 'site_r'}
+    aniso3_aniso2 = {'specimen':'er_specimen_name', 'aniso_type':'anisotropy_type',
+                     'description':'result_description', 'aniso_ftest':'anisotropy_ftest',
+                     'aniso_ftest12':'anisotropy_ftest12', 'aniso_ftest23':'anisotropy_ftest23',
+                     'aniso_s_mean':'anisotropy_mean', 'aniso_s_n_measurements':'anisotropy_n',
+                     'aniso_s_sigma':'anisotropy_sigma', 'aniso_s_unit':'anisotropy_unit',
+                     'aniso_tilt_correction':'anisotropy_tilt_correction'}
+    samp3_samp2 = {'int_n_specimens' : 'sample_int_n', 'int_abs_sigma' : 'sample_int_sigma',
+                   'int_abs_sigma_perc' : 'sample_int_sigma_perc', 'dir_alpha95' : 'sample_alpha95',
+                   'dir_n_specimens' : 'sample_n', 'dir_n_specimens_lines' : 'sample_n_lines',
+                   'dir_n_specimens_planes' : 'sample_n_planes', 'dir_k' : 'sample_k',
+                   'dir_r' : 'sample_r'}
+    meas3_meas2 = {'treat_dc_field_theta': 'treatment_dc_field_theta', 'sample': 'er_sample_name',
+                   'treat_dc_field': 'treatment_dc_field',
+                   'instrument_codes': 'magic_instrument_codes',
+                   'description': 'measurement_description', 'magn_volume': 'measurement_magn_volume',
+                   'specimen': 'er_specimen_name', 'treat_dc_field_phi': 'treatment_dc_field_phi',
+                   'number': 'measurement_number', 'site': 'er_site_name',
+                   'treat_ac_field': 'treatment_ac_field', 'flag': 'measurement_flag',
+                   'dir_inc': 'measurement_inc', 'location': 'er_location_name',
+                   'dir_dec': 'measurement_dec', 'method_codes': 'magic_method_codes',
+                   'treat_temp': 'treatment_temp', 'magn_moment': 'measurement_magn_moment',
+                   'magn_mass': 'measurement_magn_mass', 'dir_csd': 'measurement_csd'}
+    NewMeas = []
+    # step through records
+    for rec in data2:
+        NewMeas.append(map_magic.convert_meas('magic3', rec))
+    # write 3.0. output to file
+    ofile = os.path.join(output_dir, 'measurements.txt')
+    magic_write(ofile, NewMeas,'measurements')
+    if os.path.exists(ofile):
+        print "-I- 3.0. format measurements file was successfully created: {}".format(ofile)
+    else:
+        print "-W- 3.0. format measurements file could not be created"
+    return NewMeas
+
+
+def getsampVGP(SampRec,SiteNFO,data_model=2.5):
+    if float(data_model) == 3.0:
+        site=get_dictitem(SiteNFO,'site',SampRec['site'],'T')
+        if len(site) > 1:
+            lat,lon,i = None,None,0
+            while lat == None or lon == None:
+                if site[i]['lat']!=None:
+                    lat = float(site[i]['lat'])
+                if site[i]['lon']!=None:
+                    lon = float(site[i]['lon'])
+                i+=1
+        else:
+            lat=float(site[0]['lat'])
+            lon=float(site[0]['lon'])
+        dec = float(SampRec['dir_dec'])
+        inc = float(SampRec['dir_inc'])
+        if SampRec['dir_alpha95']!="":
+            a95=float(SampRec['dir_alpha95'])
+        else:
+            a95=0
+        plon,plat,dp,dm=dia_vgp(dec,inc,a95,lat,lon)
+        ResRec={}
+        ResRec['result_name']='VGP Sample: '+SampRec['sample']
+        ResRec['location']=SampRec['location']
+        ResRec['citations']="This study"
+        ResRec['site']=SampRec['site']
+        ResRec['dir_dec']=SampRec['dir_dec']
+        ResRec['dir_inc']=SampRec['dir_inc']
+        ResRec['dir_alpha95']=SampRec['dir_alpha95']
+        ResRec['dir_tilt_correction']=SampRec['dir_tilt_correction']
+        ResRec['dir_comp_name']=SampRec['dir_comp_name']
+        ResRec['vgp_lat']='%7.1f'%(plat)
+        ResRec['vgp_lon']='%7.1f'%(plon)
+        ResRec['vgp_dp']='%7.1f'%(dp)
+        ResRec['vgp_dm']='%7.1f'%(dm)
+        ResRec['method_codes']=SampRec['method_codes']+":DE-DI"
+        return ResRec
+    else:
+        site=get_dictitem(SiteNFO,'er_site_name',SampRec['er_site_name'],'T')
         lat=float(site['site_lat'])
         lon=float(site['site_lon'])
         dec = float(SampRec['sample_dec'])
@@ -230,7 +350,7 @@ def getsampVGP(SampRec,SiteNFO):
             a95=float(SampRec['sample_alpha95'])
         else:
             a95=0
-        plong,plat,dp,dm=dia_vgp(dec,inc,a95,lat,lon)
+        plon,plat,dp,dm=dia_vgp(dec,inc,a95,lat,lon)
         ResRec={}
         ResRec['pmag_result_name']='VGP Sample: '+SampRec['er_sample_name']
         ResRec['er_location_names']=SampRec['er_location_name']
@@ -247,8 +367,6 @@ def getsampVGP(SampRec,SiteNFO):
         ResRec['vgp_dm']='%7.1f'%(dm)
         ResRec['magic_method_codes']=SampRec['magic_method_codes']+":DE-DI"
         return ResRec
-    except:
-        return ""
 
 def getsampVDM(SampRec,SampNFO):
     samps=get_dictitem(SampNFO,'er_sample_name',SampRec['er_sample_name'],'T')
@@ -676,7 +794,7 @@ def int_pars(x,y,vds,**kwargs):
     """
      calculates York regression and Coe parameters (with Tauxe Fvds)
     """
-# first do linear regression a la York
+    # first do linear regression a la York
     if 'version' in kwargs.keys() and kwargs['version']==3: # do Data Model 3 way:
         n_key='int_n_measurements'
         b_key='int_b'
@@ -685,7 +803,7 @@ def int_pars(x,y,vds,**kwargs):
         fvds_key='int_fvds'
         g_key='int_g'
         q_key='int_q'
-        b_beta_key=='int_b_beta'
+        b_beta_key='int_b_beta'
 
     else: # version 2
         n_key='specimen_int_n'
@@ -695,7 +813,7 @@ def int_pars(x,y,vds,**kwargs):
         fvds_key='specimen_fvds'
         g_key='specimen_g'
         q_key='specimen_q'
-        b_beta_key=='specimen_b_beta'
+        b_beta_key='specimen_b_beta'
 
 
     xx,yer,xer,xyer,yy,xsum,ysum,xy=0.,0.,0.,0.,0.,0.,0.,0.
@@ -793,7 +911,7 @@ def vspec_magic(data):
     for i in range(k,len(data)):
         FDirdata,Dirdata,DataStateCurr,newstate=[],[],{},0
         for key in treats:  # check if anything changed
-	    DataStateCurr[key]=data[i][key]
+            DataStateCurr[key]=data[i][key]
             if DataStateCurr[key].strip() !=  DataState0[key].strip(): newstate=1 # something changed
         if newstate==1:
             if i==k: # sample is unique
@@ -835,11 +953,11 @@ def get_specs(data):
     """
      takes a magic format file and returns a list of unique specimen names
     """
-# sort the specimen names
-#
+    # sort the specimen names
     speclist=[]
     for rec in data:
-      spec=rec["er_specimen_name"]
+      try: spec=rec["er_specimen_name"]
+      except KeyError as e: spec=rec["specimen"]
       if spec not in speclist:
           speclist.append(spec)
     speclist.sort()
@@ -899,7 +1017,7 @@ def find_dmag_rec(s,data,**kwargs):
     """
     returns demagnetization data for specimen s from the data - excludes other kinds of experiments and "bad" measurements
     """
-    if 'version' in kwargs.keys() and kwargs['version']==3: 
+    if 'version' in kwargs.keys() and kwargs['version']==3:
         data=data.to_dict('records')  # convert dataframe to list of dictionaries
         spec_key,dec_key,inc_key='specimen','dir_dec','dir_inc'
         flag_key,temp_key,ac_key='flag','treat_temp','treat_ac_field'
@@ -988,10 +1106,14 @@ def magic_read(infile, data=None, return_keys=False):
         try:
             f=open(infile,"rU")
         except:
+            if return_keys:
+                return [], 'bad_file', []
             return [],'bad_file'
 
     d = f.readline()[:-1].strip('\n')
     if not d:
+        if return_keys:
+            return [], 'empty_file', []
         return [], 'empty_file'
     if d[0]=="s" or d[1]=="s":
         delim='space'
@@ -1000,6 +1122,8 @@ def magic_read(infile, data=None, return_keys=False):
     else:
         print 'error reading ', infile
         #sys.exit()
+        if return_keys:
+            return [], 'bad_file', []
         return [], 'bad_file'
     if delim=='space':
         file_type=d.split()[1]
@@ -1017,8 +1141,10 @@ def magic_read(infile, data=None, return_keys=False):
     for key in line:
         magic_keys.append(key)
     lines=f.readlines()
-    if len(lines)<1:
-       return [],'empty_file'
+    if len(lines) < 1:
+        if return_keys:
+            return [], 'empty_file', []
+        return [],'empty_file'
     for line in lines[:-1]:
         line.replace('\n','')
         if delim=='space':rec=line[:-1].split()
@@ -1051,6 +1177,68 @@ def magic_read(infile, data=None, return_keys=False):
         return magic_data, file_type, magic_keys
     return magic_data,file_type
 
+
+def magic_read_dict(path, data=None, sort_by_this_name=None, return_keys=False):
+    """
+    read a magic-formatted tab-delimited file.
+    return a dictionary of dictionaries, with this format:
+    {'Z35.5a': {'specimen_weight': '1.000e-03', 'er_citation_names': 'This study', 'specimen_volume': '', 'er_location_name': '', 'er_site_name': 'Z35.', 'er_sample_name': 'Z35.5', 'specimen_class': '', 'er_specimen_name': 'Z35.5a', 'specimen_lithology': '', 'specimen_type': ''}, ....}
+    return data, file_type, and keys (if return_keys is true)
+    """
+    DATA = {}
+    fin = open(path, 'rU')
+    first_line = fin.readline()
+    if not first_line:
+        if return_keys:
+            return False, 'empty_file', None
+        else:
+            return False, 'empty_file'
+    if first_line[0] == "s" or first_line[1] == "s":
+        delim = ' '
+    elif first_line[0] == "t" or first_line[1] == "t":
+        delim = '\t'
+    else:
+        print '-W- error reading ', path
+        if return_keys:
+            return False, 'bad_file', None
+        else:
+            return False, 'bad_file'
+
+
+    file_type = first_line.strip('\n').split(delim)[1]
+
+    item_type = file_type
+    #item_type = file_type.split('_')[1][:-1]
+    if sort_by_this_name:
+        pass
+    elif item_type == 'age':
+        sort_by_this_name = "by_line_number"
+    else:
+        sort_by_this_name = item_type
+    line = fin.readline()
+    header = line.strip('\n').split(delim)
+    counter = 0
+    for line in fin.readlines():
+        tmp_data = {}
+        tmp_line = line.strip('\n').split(delim)
+        for i in xrange(len(header)):
+            if i < len(tmp_line):
+                tmp_data[header[i]] = tmp_line[i]
+            else:
+                tmp_data[header[i]] = ""
+        if sort_by_this_name == "by_line_number":
+            DATA[counter] = tmp_data
+            counter += 1
+        else:
+            if tmp_data[sort_by_this_name] != "":
+                DATA[tmp_data[sort_by_this_name]] = tmp_data
+    fin.close()
+    if return_keys:
+        return DATA, file_type, header
+    else:
+        return DATA, file_type
+
+
 def sort_magic_data(magic_data,sort_name):
     '''
     sort magic_data by on header (like er_specimen_name for example)
@@ -1061,7 +1249,7 @@ def sort_magic_data(magic_data,sort_name):
        if name not in magic_data_sorted.keys():
            magic_data_sorted[name]=[]
        magic_data_sorted[name].append(rec)
-    return  magic_data_sorted 
+    return  magic_data_sorted
 
 def upload_read(infile,table):
     """
@@ -1506,7 +1694,7 @@ def dir2cart(d):
         decs,incs=d[:,0]*rad,d[:,1]*rad
         if d.shape[1]==3: ints=d[:,2] # take the given lengths
     else: # single vector
-        decs,incs=numpy.array(d[0])*rad,numpy.array(d[1])*rad
+        decs,incs=numpy.array(float(d[0]))*rad,numpy.array(float(d[1]))*rad
         if len(d)==3:
             ints=numpy.array(d[2])
         else:
@@ -1536,15 +1724,19 @@ def findrec(s,data):
            datablock.append([rec[1],rec[2],rec[3],rec[4]])
     return datablock
 
-def domean(indata,start,end,calculation_type):
+def domean(data,start,end,calculation_type):
     """
      gets average direction using fisher or pca (line or plane) methods
     """
     mpars={}
     datablock=[]
     start0,end0=start,end
+    #indata = [rec.append('g') if len(rec)<6 else rec for rec in indata] # this statement doesn't work!
+    indata=[]
+    for rec in data:
+        if len(rec)<6:rec.append('g')
+        indata.append(rec)
     if indata[start0][5] == 'b': print("Can't select 'bad' point as start for PCA")
-    indata = [rec.append('g') if len(rec)<6 else rec for rec in indata]
     flags = map(lambda x: x[5], indata)
     bad_before_start = flags[:start0].count('b')
     bad_in_mean = flags[start0:end0+1].count('b')
@@ -1672,7 +1864,7 @@ def domean(indata,start,end,calculation_type):
         MAD=numpy.arctan(numpy.sqrt(t[2]/t[1]+t[2]/t[0]))/rad
         if numpy.iscomplexobj(MAD): MAD = MAD.real
 #
-#  	get angle with  center of mass
+#   get angle with  center of mass
 #
     CMdir=cart2dir(cm)
     Dirp=[Dir[0],Dir[1],1.]
@@ -1727,7 +1919,7 @@ def PintPars(datablock,araiblock,zijdblock,start,end,accept,**kwargs):
     """
      calculate the paleointensity magic parameters  make some definitions
     """
-    if 'version' in kwargs.keys() and kwargs['version']==3:  
+    if 'version' in kwargs.keys() and kwargs['version']==3:
         meth_key='method_codes'
         beta_key='int_b_beta'
         temp_key,min_key,max_key='treat_temp','meas_step_min','meas_step_max'
@@ -3029,7 +3221,7 @@ def dolnp3_0(Data):
         ReturnData = {}
         ReturnData["dec"]=Data[0]['dir_dec']
         ReturnData["inc"]=Data[0]['dir_inc']
-        ReturnData["n"]='1'
+        ReturnData["n_total"]='1'
         if "DE-BFP" in Data[0]['method_codes']:
             ReturnData["n_lines"]='0'
             ReturnData["n_planes"]='1'
@@ -3037,8 +3229,8 @@ def dolnp3_0(Data):
             ReturnData["n_planes"]='0'
             ReturnData["n_lines"]='1'
         ReturnData["alpha95"]=""
-        ReturnData["r"]=""
-        ReturnData["k"]=""
+        ReturnData["R"]=""
+        ReturnData["K"]=""
         return ReturnData
     else:
         LnpData = []
@@ -3050,7 +3242,7 @@ def dolnp3_0(Data):
             if 'method_codes' in d.keys():
                 if "DE-BFP" in d['method_codes']: LnpData[n]['dir_type'] = 'p'
                 else: LnpData[n]['dir_type'] = 'l'
-        ReturnData=pmag.dolnp(LnpData,'dir_type') # get a sample average from all specimens
+        ReturnData=dolnp(LnpData,'dir_type') # get a sample average from all specimens
         return ReturnData
 
 
@@ -3067,17 +3259,17 @@ def dolnp(data,direction_type_key):
     X,L,fdata,dirV=[],[],[],[0,0,0]
     E=[0,0,0]
     fpars={}
-#
-# sort data  into lines and planes and collect cartesian coordinates
+
+    # sort data  into lines and planes and collect cartesian coordinates
     for rec in data:
-        cart=dir2cart([rec["dec"],rec["inc"]])[0]
+        cart=dir2cart([float(rec["dec"]),float(rec["inc"])])[0]
         if direction_type_key in rec.keys():
             if rec[direction_type_key]=='p': # this is a pole to a plane
                 n_planes+=1
                 L.append(cart) # this is the "EL, EM, EN" array of MM88
             else: # this is a line
                 n_lines+=1
-                fdata.append([rec["dec"],rec["inc"],1.]) # collect data for fisher calculation
+                fdata.append([float(rec["dec"]),float(rec["inc"]),1.]) # collect data for fisher calculation
                 X.append(cart)
                 E[0]+=cart[0]
                 E[1]+=cart[1]
@@ -4966,8 +5158,8 @@ def sortarai(datablock,s,Zdiff,**kwargs):
     """
      sorts data block in to first_Z, first_I, etc.
     """
-    if 'version' in kwargs.keys() and kwargs['version']==3:  
-        dec_key,inc_key='dir_dec','dir_inc'    
+    if 'version' in kwargs.keys() and kwargs['version']==3:
+        dec_key,inc_key='dir_dec','dir_inc'
         Mkeys=['magn_moment','magn_volume','magn_mass','magnitude']
         meth_key='method_codes'
         temp_key,dc_key='treat_temp','treat_dc_field'
@@ -4992,7 +5184,7 @@ def sortarai(datablock,s,Zdiff,**kwargs):
             break
 # first find all the steps
     for k in range(len(datablock)):
-	rec=datablock[k]
+        rec=datablock[k]
         temp=float(rec[temp_key])
         methcodes=[]
         tmp=rec[meth_key].split(":")
@@ -6170,7 +6362,7 @@ def get_samp_con():
         Sample naming convention:
             [1] XXXXY: where XXXX is an arbitrary length site designation and Y
                 is the single character sample designation.  e.g., TG001a is the
-                first sample from site TG001.  	 [default]
+                first sample from site TG001.    [default]
             [2] XXXX-YY: YY sample from site XXXX (XXX, YY of arbitary length)
             [3] XXXX.YY: YY sample from site XXXX (XXX, YY of arbitary length)
             [4-Z] XXXX[YYY]:  YYY is sample designation with Z characters from site XXX
@@ -8213,121 +8405,13 @@ def get_TS(ts):
     print "Time Scale Option Not Available"
     sys.exit()
 
-def initialize_acceptance_criteria3_0 ():
-    """
-    initialize acceptance criteria with NULL criterion_values for thellier_gui and demag_gui
-
-    acceptance criteria format is a list of criteria dictionaries:
-        crit={}
-        crit['criterion']=
-        crit['criterion_operation']=
-        crit['criterion_value']=
-        crit['decimal_points']=
-
-   'criterion':
-       'DE-SPEC','DE-SAMP'..etc
-   'table_column':
-       MagIC table and column name
-   'criterion_value':
-        a number (for 'regular criteria')
-        a string (for 'flag')
-        1 for True (if criteria is boolean)
-        0 for False (if criteria is boolean)
-        -999 means N/A
-   'criterion_operation':
-       '>='for low threshold criterion_value
-       '<='for <= threshold criterion_value
-        [flag1,flag2]: for flags
-        '=' for boolean flags (can be 'g','b' or True/Flase or 1/0)
-        [column_name.string] 'contains' if column_name (e.g., method_codes) contains string  (e.g., DE-BFP)
-        'does not contain' if column_name does not contain string 
-   'decimal_points':
-       number of decimal points in rounding
-       (this is used in displaying criteria in the dialog box)
-       -999 means Exponent with 3 decimal points for floats and string for string
-    """
-
-    criteria=[]
-    # >=
-    for column in ['specimens.dir_n_measurements','samples.dir_n_specimens','samples.dir_n_specimens_lines','samples.dir_n_specimens_planes',\
-             'sites.dir_n_samples','sites.dir_n_samples_lines','sites.dir_n_samples_planes','sites.dir_k','sites.dir_r','sites.dir_alpha95'\
-              'specimens.int_n','specimens.int_f','specimens.int_fvds','specimens.int_frac','specimens.int_q','specimens.int_w','specimens.int_r2_corr','specimens.int_n_ptrm',\
-              'specimens.int_n_ptrm_tail','specimens.int_n_ac','samples.int_n','sites.int_n','sites.vadm_n_samples','sites.vdm_n_samples','sites.vgp_n_samples', 'sites.age_low']:
-        crit={}
-        crit['table_column']=column
-        crit['criterion_operation']=[">="]
-        crit['criterion_value']=0
-        crit['decimal_points']=0
-        criteria.append(crit)
-    # <=
-    for column in ['specimens.dir_mad_free','specimens.dir_dang','specimens.dir_alpha95','samples.dir_r','samples.dir_alpha95','samples.dir_k',\
-              'sites.dir_alpha95','sites.dir_k','specimens.int_b_sigma','specimens.int_b_beta','specimens.int_g','specimens.int_gmax','specimens.int_k','specimens.int_k_sse','specimens.int_k_prime','specimens.int_k_prime_sse',\
-              'specimens.int_rs_det','specimens.int_z','specimens.int_z_md','specimens.int_int_mad_free','specimens.int_mad_anc','specimens.int_alpha','specimens.int_alpha_prime',\
-               'specimens.int_theta','specimens.int_dang','specimens.int_crm','specimens.int_n_ptrm','specimens.int_dck','specimens.int_drat','specimens.int_maxdev','specimens.int_cdrat',\
-               'specimens.int_drats','specimens.int_mdrat','specimens.int_mdev','specimens.int_dpal','specimens.int_tail_drat','specimens.int_dtr','specimens.int_md','specimens.int_dt',\
-                'specimens.int_dac','specimens.int_gamma','samples.int_rel_sigma','samples.int_rel_sigma_perc','samples.int_sigma','samples.int_sigma_perc',\
-                'sites.int_rel_sigma','sites.int_rel_sigma_perc','sites.int_sigma','sites.int_sigma_perc','sites.vadm_sigma','sites.vdm_sigma'\
-                'sites.vgp_alpha95','sites.vgp_dm','sites.vgp_dp','sites.age_high','specimens.aniso_alt','specimens.aniso_ftest']:
-        crit={}
-        crit['table_column']=column
-        crit['criterion_operation']=["<="]
-        crit['criterion_value']=-999
-        crit['decimal_points']=0
-        criteria.append(crit)
-# WHAT ARE THESE - THEY ARE NOT IN DATA MODEL 3.0:   'samples.aniso_mean','sites.aniso_mean']: # criterion_value is in precent
-    # contains/does not contain
-    for column in ['method_codes.DE-BFP','method_codes.DE-BFL','method_codes.DE-FM']:
-        crit={}
-        crit['table_column']=column
-        crit['criterion_operation']=['contains','does not contain'] 
-        crit['criterion_value']=column.split('.')[-1]
-        crit['decimal_points']=0
-        criteria.append(crit)
-    # equals
-    for column in ['specimens.dir_polarity','samples.dir_polarity','sites.dir_polarity','sites.tilt_correction','specimens.int_scat','sites.age_unit']:
-        crit={}
-        crit['table_column']=column
-        crit['criterion_operation']=['=']
-        crit['decimal_points']=-999
-#
-# A little clean up here
-#
-    acceptance_criteria=[]
-    for crit in criteria:
-        criterion=""
-        if 'int_' in crit['table_column']: crit['criterion']='IE-'
-        if 'dir_' in column: criterion='DE-'
-        if 'specimens' in column: criterion=criterion+'SPEC'
-        if 'samples' in column: criterion=criterion+'SAMP'
-        if 'sites' in column: criterion=criterion+'SITE'
-        if 'polarity' in column: 
-            criterion='POLE'
-            crit['criterion_value']=['n','r','t','e','i']
-        if 'age' in column:
-            crit['criterion_value']=['Ga','Ka','Ma','Years AD (+/-)','Years BP','Years Cal AD (+/-)','Years Cal BP']
-        if 'scat' in column:
-            crit['criterion_value']=['true','false']
-        for c in ['alpha95','sigma_perc','vgp_dm','vdp_dp']:
-            crit['decimal_points']=1
-        for c in ['int_f','int_fvds','int_frac','int_q','int_gmax']:
-            if c in crit['table_column'].split('.')[-1]:  crit['decimal_points']=2
-        for c in ['int_b_sigma','int_b_beta','int_g','int_k', 'int_k_prime']:
-            if c in crit['table_column'].split('.')[-1]:  crit['decimal_points']=3
-        crit['criterion']=criterion
-        acceptance_criteria.append(crit)
-# initialize average_by_sample_or_site to site
-    crit={'criterion':'average_by_sample_or_site','criterion_operation':'+','criterion_value':-999,'description':'','table_column':'sites.int_abs'}
-    acceptance_criteria.append(crit)
-    #print 'PMAG1: ',acceptance_criteria
-    return(acceptance_criteria)
-
 
 
 def initialize_acceptance_criteria (**kwargs):
     '''
     initialize acceptance criteria with NULL values for thellier_gui and demag_gui
 
-    acceptancec criteria format is doctionaries:
+    acceptance criteria format is doctionaries:
 
     acceptance_criteria={}
         acceptance_criteria[crit]={}
@@ -8362,7 +8446,6 @@ def initialize_acceptance_criteria (**kwargs):
     # --------------------------------
     # 'DE-SPEC'
     # --------------------------------
-
     # low cutoff value
     category='DE-SPEC'
     for crit in ['specimen_n']:
@@ -8820,7 +8903,7 @@ def read_criteria_from_file(path,acceptance_criteria,**kwargs):
 
     path is the full path to the criteria file
 
-    the fucntion takes exiting acceptance_criteria
+    the function takes exiting acceptance_criteria
     and updtate it with criteria from file
 
     output:
@@ -8841,7 +8924,6 @@ def read_criteria_from_file(path,acceptance_criteria,**kwargs):
     acceptance_criteria_list=acceptance_criteria.keys()
     if 'data_model' in kwargs.keys() and kwargs['data_model']==3:
         crit_data=acceptance_criteria # data already read in
-        
     else:
         crit_data,file_type=magic_read(path)
     for rec in crit_data:
@@ -8883,38 +8965,21 @@ def read_criteria_from_file(path,acceptance_criteria,**kwargs):
                 acceptance_criteria[crit]['value']=float(rec[crit])
     return(acceptance_criteria)
 
-def convert_data_models(direction,crit):
-    magic2 = ['specimen_coeff_det_sq', 'specimen_int_ptrm_tail_n', 'specimen_dpal', 'specimen_tail_drat', 'specimen_md', 'specimen_ac_n', 'specimen_dac',  'specimen_int_mad', 'specimen_int_ptrm_n', 'specimen_drat', 'specimen_z_md', 'specimen_frac', 'specimen_cdrat', 'specimen_dec', 'specimen_mdev', 'specimen_drats', 'specimen_z', 'specimen_maxdev', 'specimen_gmax', 'specimen_int_mad_anc', 'specimen_scat', 'specimen_r_sq', 'specimen_b_beta', 'specimen_dck', 'lab_dc_field', 'specimen_inc', 'specimen_mdrat', 'specimen_theta', 'specimen_ptrm', 'measurement_step_min', 'specimen_dtr', 'specimen_int_alpha', 'specimen_fvds', 'specimen_b_sigma', 'specimen_b', 'specimen_g', 'specimen_f', 'measurement_step_max', 'specimen_int_n', 'specimen_q', 'specimen_int_dang', 'specimen_k_sse', 'specimen_gamma', 'specimen_k', 'specimen_int_crm', 'specimen_dt', 'specimen_k_prime', 'specimen_k_prime_sse','sample_int_n','sample_int_sigma_perc','sample_int_sigma','site_int_n','site_int_sigma_perc','site_int_sigma','pmag_criteria_code']
-    magic3 = ['specimens.int_r2_det', 'specimens.int_n_ptrm_tail', 'specimens.int_dpal', 'specimens.int_drat_tail', 'specimens.int_md', 'specimens.int_n_ac', 'specimens.int_dac', 'specimens.int_mad', 'specimens.int_n_ptrm', 'specimens.int_drat', 'specimens.int_z_md', 'specimens.int_frac', 'specimens.int_cdrat', 'specimens.dir_dec', 'specimens.int_mdev', 'specimens.int_drats', 'specimens.int_z', 'specimens.int_maxdev', 'specimens.int_gmax', 'specimens.int_mad_anc', 'specimens.int_scat', 'specimens.int_r2_corr', 'specimens.int_b_beta', 'specimens.int_dck', 'specimens.treat_dc_field', 'specimens.dir_inc', 'specimens.int_mdrat', 'specimens.int_theta', 'specimens.int_ptrm', 'specimens.meas_step_min', 'specimens.int_dtr', 'specimens.int_alpha', 'specimens.int_fvds', 'specimens.int_b_sigma', 'specimens.int_b', 'specimens.int_g', 'specimens.int_f', 'specimens.meas_step_max', 'specimens.int_n_measurements', 'specimens.int_q', 'specimens.int_dang',  'specimens.int_k_sse', 'specimens.int_gamma', 'specimens.int_k', 'specimens.int_crm', 'specimens.int_dt', 'specimens.int_k_prime', 'specimens.int_k_prime_sse','samples.int_n_specimens','samples.int_sigma_perc','samples.int_sigma','sites.int_n_specimens','sites.int_sigma_perc','sites.int_sigma','criterion']
-    if direction=='magic2':
-        if crit in magic3:
-            return magic2[magic3.index(crit)]
-        else:
-            return crit
-    else:
-        if crit in magic2:
-            return magic3[magic2.index(crit)]
-        else:
-            return crit
 
-
- 
 
 
 def write_criteria_to_file(path,acceptance_criteria,**kwargs):
     crit_list=acceptance_criteria.keys()
     crit_list.sort()
     if 'data_model' in kwargs.keys() and kwargs['data_model']==3:
-        criteria_file='criteria.txt'
         code_key='criterion'
         definition_key='definition'
         citation_key='citations'
     else:
-        criteria_file='pmag_criteria.txt'
         code_key='pmag_criteria_code'
         definition_key='criteria_definition'
         citation_key='er_citation_names'
-    recs=[] # data_model 3 has a list of dictionaries, data_model 2.5 has just one record   
+    recs=[] # data_model 3 has a list of dictionaries, data_model 2.5 has just one record
     rec={}
     rec[code_key]="ACCEPT"
     rec[definition_key]="acceptance criteria for study"
@@ -8934,7 +8999,7 @@ def write_criteria_to_file(path,acceptance_criteria,**kwargs):
                     rec[code_key]="IE-SITE"
                 rec[definition_key]="acceptance criteria for study"
                 rec[citation_key]="This study"
-                crit3_0=convert_data_models('magic3',crit)
+                crit3_0=map_magic.convert_intensity_criteria('magic3',crit)
                 rec['table_column']=crit3_0
                 if acceptance_criteria[crit]['threshold_type']=='low':
                     op='>='
@@ -8978,8 +9043,12 @@ def write_criteria_to_file(path,acceptance_criteria,**kwargs):
           else:
               print "-W- WARNING: statistic %s not written to file:",crit
     if 'data_model' in kwargs.keys() and kwargs['data_model']==3: # need to make a list of these dictionaries
+        if 'prior_crits' in kwargs.keys():
+             prior_crits=kwargs['prior_crits']
+             for rec in prior_crits:
+                 if 'criterion' in rec.keys() and 'IE-' not in rec['criterion']:recs.append(rec) # preserve non-intensity related criteria
         magic_write(path,recs,'criteria')
-    else: 
+    else:
         magic_write(path,[rec],'pmag_criteria')
 
 
@@ -9047,6 +9116,21 @@ def get_attr(obj, attr='name'):
     except AttributeError:
         name = str(obj)
     return name
+
+
+def adjust_val_to_360(val):
+    """
+    Take in a single numeric (or null) argument.
+    Return argument adjusted to be between
+    0 and 360 degrees.
+    """
+    if not val:
+        return None
+    else:
+        try:
+            return float(val) % 360
+        except ValueError:
+            return val
 
 def adjust_to_360(val, key):
     """

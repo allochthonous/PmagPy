@@ -8,7 +8,7 @@ import pmag_widgets as pw
 import magic_grid3 as magic_grid
 import pmagpy.builder as builder
 from pmagpy.controlled_vocabularies3 import vocab
-import programs.new_builder as nb
+import pmagpy.new_builder as nb
 
 
 class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
@@ -39,14 +39,13 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
         # these are the headers that are required no matter what for this datatype
         self.reqd_headers = dm[dm['str_validations'].str.contains("required\(\)").fillna(False)].index
         self.dm = dm
-                
+
         if self.parent:
             self.Bind(wx.EVT_WINDOW_DESTROY, self.parent.Parent.on_close_grid_frame)
 
-        if self.grid_type == 'age':
-            ancestry_ind = self.contribution.ancestry.index(self.er_magic.age_type)
-            self.child_type = self.contribution.ancestry[ancestry_ind-1]
-            self.parent_type = self.contribution.ancestry[ancestry_ind+1]
+        if self.grid_type == 'ages':
+            self.child_type = None
+            self.parent_type = None
         else:
             try:
                 child_ind = self.contribution.ancestry.index(self.grid_type) - 1
@@ -154,7 +153,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
                                           name='toggle_codes_btn')
         self.Bind(wx.EVT_BUTTON, self.toggle_codes, self.toggle_codes_btn)
         # message
-        self.code_msg_boxsizer = pw.MethodCodeDemystifier(self.panel)
+        self.code_msg_boxsizer = pw.MethodCodeDemystifier(self.panel, vocab)
         self.code_msg_boxsizer.ShowItems(False)
 
         ## Add content to sizers
@@ -266,7 +265,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
         #self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
         if event:
             event.Skip()
-        self.main_sizer.Fit(self)        
+        self.main_sizer.Fit(self)
         disp_size = wx.GetDisplaySize()
         actual_size = self.GetSize()
         rows = self.grid.GetNumberRows()
@@ -317,8 +316,6 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
             self.onSave(None)
 
         label = event.GetEventObject().Label
-
-        self.er_magic.age_type = label
         self.grid.Destroy()
 
         # normally grid_frame is reset to None when grid is destroyed
@@ -615,6 +612,9 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
     ## Meta buttons -- cancel & save functions
 
     def onImport(self, event):
+        print "this functionality has not been converted to 3.0"
+        return
+        """
         openFileDialog = wx.FileDialog(self, "Open MagIC-format file", self.WD, "",
                                        "MagIC file|*.*", wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
         result = openFileDialog.ShowModal()
@@ -624,19 +624,6 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
                 import_type = 'age'
                 parent_type = None
                 filename = openFileDialog.GetPath()
-                file_type = self.er_magic.get_age_info(filename)
-                import_type = file_type.split('_')[1][:-1]
-            elif self.grid_type == 'result':
-                import_type = 'result'
-                parent_type = None
-                try:
-                    filename = openFileDialog.GetPath()
-                    self.er_magic.get_results_info(filename)
-                except Exception as ex:
-                    print '-W- ', ex
-                    print '-W- Could not read file:\n{}\nFile may be corrupted, or may not be a results format file.'.format(filename)
-                    pw.simple_warning('Could not read file:\n{}\nFile may be corrupted, or may not be a results format file.'.format(filename))
-                    return
             else:
                 parent_ind = self.er_magic.ancestry.index(self.grid_type)
                 parent_type = self.er_magic.ancestry[parent_ind+1]
@@ -650,7 +637,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
             self.er_magic.init_actual_headers()
             er_headers = list(set(self.er_magic.headers[self.grid_type]['er'][0]).union(current_headers))
             self.er_magic.headers[self.grid_type]['er'][0] = er_headers
-            
+
             include_pmag = False
             if 'pmag' in filename and import_type == self.grid_type:
                 include_pmag = True
@@ -680,13 +667,14 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
             # warn user
             else:
                 pw.simple_warning('You have imported a {} type file.\nYou\'ll need to open up your {} grid to see the added data'.format(import_type, import_type))
+        """
 
     def onCancelButton(self, event):
         if self.grid.changes:
-            dlg1 = wx.MessageDialog(self,caption="Message:", message="Are you sure you want to exit this grid?\nYour changes will not be saved.\n ", style=wx.OK|wx.CANCEL)
+            dlg1 = wx.MessageDialog(self, caption="Message:", message="Are you sure you want to exit this grid?\nYour changes will not be saved.\n ", style=wx.OK|wx.CANCEL)
             result = dlg1.ShowModal()
             if result == wx.ID_OK:
-                dlg1.Destroy()    
+                dlg1.Destroy()
                 self.Destroy()
         else:
             self.Destroy()
@@ -761,7 +749,8 @@ class GridBuilder(object):
             if self.grid_type == 'ages':
                 levels = ['specimen', 'sample', 'site', 'location']
                 for label in levels:
-                    col_labels.remove(label)
+                    if label in col_labels:
+                        col_labels.remove(label)
                 col_labels[:0] = levels
             else:
                 if self.parent_type:
@@ -798,10 +787,6 @@ class GridBuilder(object):
             print '-I- No changes to save'
             return
 
-        #if self.grid_type == 'ages':
-        #    age_data_type = self.er_magic.age_type
-        #    self.er_magic.write_ages = True
-
         starred_cols = self.grid.remove_starred_labels()
         # locks in value in cell currently edited
         self.grid.SaveEditControlValue()
@@ -823,7 +808,7 @@ class GridBuilder(object):
             # update the contribution with the new dataframe
             self.contribution.tables[self.grid_type] = self.magic_dataframe
             # *** probably don't actually want to write to file, here (but maybe)
-            self.magic_dataframe.write_magic_file("_{}.txt".format(self.grid_type),
+            self.magic_dataframe.write_magic_file("{}.txt".format(self.grid_type),
                                                   self.contribution.directory)
             return
 

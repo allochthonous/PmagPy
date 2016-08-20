@@ -15,19 +15,19 @@ from pmag_env import set_env
 if not set_env.isServer:
     import pmagpy.nlt as nlt
 
-import new_builder as nb
+import pmagpy.new_builder as nb
 
 
 def main():
     """
     NAME
         thellier_magic.py
-    
+
     DESCRIPTION
         plots Thellier-Thellier data in version 3.0 format
         Reads saved interpretations from a specimen formatted table, default: specimens.txt
 
-    SYNTAX 
+    SYNTAX
         thellier_magic.py [command line options]
 
     OPTIONS
@@ -43,8 +43,8 @@ def main():
            BEG: starting step number for slope calculation
            END: ending step number for slope calculation
         -z use only z component difference for pTRM calculation
-  
-    OUTPUT 
+
+    OUTPUT
         figures:
             ALL:  numbers refer to temperature steps in command line window
             1) Arai plot:  closed circles are zero-field first/infield
@@ -59,21 +59,21 @@ def main():
                            circles are NRM remaining
                            squares are pTRM gained
             4) equal area projections:
- 			   green triangles are pTRM gained direction
-                           red (purple) circles are lower(upper) hemisphere of ZI step directions 
-                           blue (cyan) squares are lower(upper) hemisphere IZ step directions 
+               green triangles are pTRM gained direction
+                           red (purple) circles are lower(upper) hemisphere of ZI step directions
+                           blue (cyan) squares are lower(upper) hemisphere IZ step directions
             5) Optional:  TRM acquisition
             6) Optional: TDS normalization
         command line window:
             list is: temperature step numbers, temperatures (C), Dec, Inc, Int (units of measuements)
                      list of possible commands: type letter followed by return to select option
                      saving of plots creates image files with specimen, plot type as name
-    """ 
+    """
 #
 #   initializations
 #
     version_num=pmag.get_version()
-    verbose=pmagplotlib.verbose 
+    verbose=pmagplotlib.verbose
 #
 # default acceptance criteria
 #
@@ -148,7 +148,7 @@ def main():
         k = 0
     else:
         k=specimen_names.index(specimen) # just do this one
-    # define figure numbers for arai, zijderveld and 
+    # define figure numbers for arai, zijderveld and
     #   de-,re-magnetization diagrams
     AZD={}
     AZD['deremag'], AZD['zijd'],AZD['arai'],AZD['eqarea']=1,2,3,4
@@ -156,10 +156,10 @@ def main():
     pmagplotlib.plot_init(AZD['zijd'],5,5)
     pmagplotlib.plot_init(AZD['deremag'],5,5)
     pmagplotlib.plot_init(AZD['eqarea'],5,5)
-    if len(trm_data)>0: 
+    if len(trm_data)>0:
         AZD['TRM']=5
         pmagplotlib.plot_init(AZD['TRM'],5,5)
-    if len(td_data)>0: 
+    if len(td_data)>0:
         AZD['TDS']=6
         pmagplotlib.plot_init(AZD['TDS'],5,5)
     #
@@ -173,7 +173,7 @@ def main():
         trmblock= trm_data[trm_data['specimen'].str.contains(this_specimen)==True] # fish out this specimen
         tdsrecs= td_data[td_data['specimen'].str.contains(this_specimen)==True] # fish out this specimen
         anisblock= anis_data[anis_data['specimen'].str.contains(this_specimen)==True] # fish out the anisotropy data
-        prior_specimen_interpretations= prior_spec_data[prior_spec_data['specimen'].str.contains(this_specimen)==True] # fish out prior interpretation 
+        prior_specimen_interpretations= prior_spec_data[prior_spec_data['specimen'].str.contains(this_specimen)==True] # fish out prior interpretation
 #
 # sort data into types
 #
@@ -197,7 +197,7 @@ def main():
 #
 # get prior interpretation steps
 #
-                   beg_int=pd.to_numeric(prior_specimen_interpretations.meas_step_min.values).tolist()[0] 
+                   beg_int=pd.to_numeric(prior_specimen_interpretations.meas_step_min.values).tolist()[0]
                    end_int=pd.to_numeric(prior_specimen_interpretations.meas_step_max.values).tolist()[0]
                else: beg_int,end_int="",""
                recnum=0
@@ -232,13 +232,15 @@ def main():
                     pars["er_specimen_name"]=this_specimen
                     #pars,kill=pmag.scoreit(pars,this_specimen_interpretation,accept,'',verbose) # deal with this later
                     pars["specimen_grade"]='None'
+                    pars['measurement_step_min']=pars['meas_step_min']
+                    pars['measurement_step_max']=pars['meas_step_max']
                     if pars['measurement_step_unit']=='K':
                         outstr= "specimen     Tmin  Tmax  N  lab_field  B_anc  b  q  f(coe)  Fvds  beta  MAD  Dang  Drats  Nptrm  Grade  R  MD%  sigma  Gamma_max \n"
-                        pars_out= (this_specimen,(pars["measurement_step_min"]-273),(pars["measurement_step_max"]-273),(pars["specimen_int_n"]),1e6*(pars["specimen_lab_field_dc"]),1e6*(pars["specimen_int"]),pars["specimen_b"],pars["specimen_q"],pars["specimen_f"],pars["specimen_fvds"],pars["specimen_b_beta"],pars["specimen_int_mad"],pars["specimen_int_dang"],pars["specimen_drats"],pars["specimen_int_ptrm_n"],pars["specimen_grade"],np.sqrt(pars["specimen_rsc"]),int(pars["specimen_md"]), pars["specimen_b_sigma"],pars['specimen_gamma'])
+                        pars_out= (this_specimen,(pars["meas_step_min"]-273),(pars["meas_step_max"]-273),(pars["specimen_int_n"]),1e6*(pars["specimen_lab_field_dc"]),1e6*(pars["specimen_int"]),pars["specimen_b"],pars["specimen_q"],pars["specimen_f"],pars["specimen_fvds"],pars["specimen_b_beta"],pars["int_mad_free"],pars["int_dang"],pars["int_drats"],pars["int_n_ptrm"],pars["specimen_grade"],np.sqrt(pars["specimen_rsc"]),int(pars["int_md"]), pars["specimen_b_sigma"],pars['specimen_gamma'])
                         outstring= '%s %4.0f %4.0f %i %4.1f %4.1f %5.3f %5.1f %5.3f %5.3f %5.3f  %7.1f %7.1f %7.1f %s %s %6.3f %i %5.3f %7.1f' % pars_out +'\n'
                     elif pars['measurement_step_unit']=='J':
                         outstr= "specimen     Wmin  Wmax  N  lab_field  B_anc  b  q  f(coe)  Fvds  beta  MAD  Dang  Drats  Nptrm  Grade  R  MD%  sigma  ThetaMax DeltaMax GammaMax\n"
-                        pars_out= (this_specimen,(pars["measurement_step_min"]),(pars["measurement_step_max"]),(pars["specimen_int_n"]),1e6*(pars["specimen_lab_field_dc"]),1e6*(pars["specimen_int"]),pars["specimen_b"],pars["specimen_q"],pars["specimen_f"],pars["specimen_fvds"],pars["specimen_b_beta"],pars["specimen_int_mad"],pars["specimen_int_dang"],pars["specimen_drats"],pars["specimen_int_ptrm_n"],pars["specimen_grade"],np.sqrt(pars["specimen_rsc"]),int(pars["specimen_md"]), pars["specimen_b_sigma"],pars["specimen_theta"],pars["specimen_delta"],pars["specimen_gamma"])
+                        pars_out= (this_specimen,(pars["meas_step_min"]),(pars["meas_step_max"]),(pars["specimen_int_n"]),1e6*(pars["specimen_lab_field_dc"]),1e6*(pars["specimen_int"]),pars["specimen_b"],pars["specimen_q"],pars["specimen_f"],pars["specimen_fvds"],pars["specimen_b_beta"],pars["specimen_int_mad"],pars["specimen_int_dang"],pars["specimen_drats"],pars["specimen_int_ptrm_n"],pars["specimen_grade"],np.sqrt(pars["specimen_rsc"]),int(pars["specimen_md"]), pars["specimen_b_sigma"],pars["specimen_theta"],pars["specimen_delta"],pars["specimen_gamma"])
                         outstring= '%s %4.0f %4.0f %i %4.1f %4.1f %5.3f %5.1f %5.3f %5.3f %5.3f  %7.1f %7.1f %7.1f %s %s %6.3f %i %5.3f %7.1f %7.1f %7.1f' % pars_out +'\n'
                     print outstr
                     print outstring
@@ -279,10 +281,9 @@ def main():
                    ans=raw_input('Return for next specimen, q to quit:  ')
                    if ans=='q':sys.exit()
                k+=1 # moving on
- 
+
 #
 
 
 if __name__ == "__main__":
     main()
-            

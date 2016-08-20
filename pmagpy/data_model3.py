@@ -1,5 +1,6 @@
 import os
 import json
+import pandas as pd
 from pandas import DataFrame
 from pmagpy import check_updates
 
@@ -11,7 +12,7 @@ class DataModel(object):
 
     def download_data_model(self):
         pmag_dir = check_updates.get_pmag_dir()
-        model_file = os.path.join(pmag_dir, '3_0', 'data_model_July_7_2016.json')
+        model_file = os.path.join(pmag_dir, '3_0', 'data_model_August_4_2016.json')
         f = open(model_file, 'r')
         string = '\n'.join(f.readlines())
         raw = json.loads(unicode(string, errors='ignore'))
@@ -25,6 +26,8 @@ class DataModel(object):
         for level in levels:
             df = DataFrame(full_df['tables'][level]['columns'])
             data_model[level] = df.transpose()
+        # replace np.nan with None
+        data_model[level] = data_model[level].where((pd.notnull(data_model[level])), None)
         return data_model
 
 
