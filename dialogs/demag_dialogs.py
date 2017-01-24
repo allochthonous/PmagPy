@@ -6,12 +6,22 @@ import wx
 import copy
 import os
 
+from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigCanvas
+from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg as NavigationToolbar
+from pylab import Figure
+from pmagpy.demag_gui_utilities import *
+from numpy import vstack,sqrt
+has_basemap=True
+try: from mpl_toolkits.basemap import Basemap
+except ImportError: has_basemap=False
+
 #============================================================================================
 # LOG HEADER:
 #  
 # Dialogs boxes for demag_gui.py
 #
 #============================================================================================
+# 9/22/2016 Version 0.2 (beta) by Kevin Gaastra
 #
 # 3/10/2014 Version 0.1 (beta) by Ron Shaar
 #
@@ -20,18 +30,235 @@ import os
 
 
 #--------------------------------------------------------------    
+# VGP viewer
 #--------------------------------------------------------------
+class VGP_Dialog(wx.Dialog):
+    """
+    
+    """
 
+    def __init__(self,parent,VGP_Data):
+        self.failed_init = False
+        if not has_basemap: parent.user_warning("This feature requires the matplotlib toolkit basemaps to function. If you are running a binary complain to a dev they forgot to bundle all dependencies"); self.failed_init=True; return 
+        super(VGP_Dialog, self).__init__(parent, title="VGP Viewer")
+        if not isinstance(VGP_Data,dict): VGP_Data={}
+        if VGP_Data!={} and not all([len(VGP_Data[k]) for k in VGP_Data.keys()]):
+            parent.user_warning("No VGP Data for VGP viewer to display")
+            self.Destroy(); self.failed_init=True; return
+        self.selected_pole = None
+        self.selected_pole_index = 0
+        self.dp_list = []
+        self.GUI_RESOLUTION=parent.GUI_RESOLUTION
+        self.VGP_Data = VGP_Data
+        self.init_UI()
+        self.fill_logger() #initialize logger
+        self.plot() #initialize plot
 
-#--------------------------------------------------------------    
+    def init_UI(self):
+
+        self.panel = wx.Panel(self,-1)
+
+        #build Plot
+        self.fig = Figure((6*self.GUI_RESOLUTION, 3*self.GUI_RESOLUTION), dpi=100)
+        self.canvas = FigCanvas(self.panel, -1, self.fig)
+        self.toolbar = NavigationToolbar(self.canvas)
+        self.toolbar.Hide()
+        self.toolbar.zoom()
+        self.plot_setting = "Zoom"
+        self.canvas.Bind(wx.EVT_LEFT_DCLICK,self.on_plot_select)
+        self.canvas.Bind(wx.EVT_MOTION,self.on_change_plot_cursor)
+        self.canvas.Bind(wx.EVT_MIDDLE_DOWN,self.on_home_plot)
+        self.canvas.Bind(wx.EVT_RIGHT_DOWN,self.on_pan_zoom_plot)
+        self.eqarea = self.fig.add_subplot(111)
+        #set map parameters
+        vgp_lons = [dp['vgp_lon'] for dp in self.VGP_Data['sites'] if 'vgp_lon' in dp]
+        self.mean_lon = sum(vgp_lons)/len(vgp_lons)
+
+        #build combobox with VGP level options
+        self.VGP_level = self.VGP_Data.keys()[0]
+        self.combo_box = wx.ComboBox(self.panel, -1, size=(340*self.GUI_RESOLUTION,25), value=self.VGP_level, choices=sorted(self.VGP_Data.keys()), style=wx.CB_DROPDOWN, name="vgp_level")
+        self.Bind(wx.EVT_COMBOBOX, self.on_level_box, self.combo_box)
+
+        #build logger
+        self.logger = wx.ListCtrl(self.panel, -1, size=(340*self.GUI_RESOLUTION,240*self.GUI_RESOLUTION), style=wx.LC_REPORT)
+        self.logger.InsertColumn(0, 'element', width=50*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(1, 'fit name', width=50*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(2, 'lat', width=50*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(3, 'lon', width=50*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(4, 'dp', width=50*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(5, 'dm', width=50*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(6, 'n', width=50*self.GUI_RESOLUTION)
+        self.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_click_listctrl, self.logger)
+
+        hbox0 = wx.BoxSizer(wx.HORIZONTAL)
+        vbox0 = wx.BoxSizer(wx.VERTICAL)
+
+        vbox0.Add(self.combo_box,proportion=0,flag=wx.ALIGN_TOP|wx.ALL,border=8)
+        vbox0.Add(self.logger,proportion=1,flag=wx.ALIGN_TOP|wx.ALL,border=8)
+
+        hbox0.Add(vbox0,proportion=0,flag=wx.ALIGN_TOP|wx.ALL,border=8)
+        hbox0.Add(self.canvas,proportion=1,flag=wx.ALIGN_TOP|wx.ALL,border=8)
+
+        self.panel.SetSizer(hbox0)
+        hbox0.Fit(self)
+
+        #set hotkeys
+        randomId = wx.NewId()
+        self.Bind(wx.EVT_MENU, self.on_exit_hk, id=randomId)
+        accel_tbl = wx.AcceleratorTable([(wx.ACCEL_CTRL,  ord('Q'), randomId )])
+        self.SetAcceleratorTable(accel_tbl)
+
+    def on_exit_hk(self,event):
+        self.Close()
+
+    def on_plot_select(self,event):
+        """
+        Select data point if cursor is in range of a data point
+        @param: event -> the wx Mouseevent for that click
+        """
+        if not self.xdata or not self.ydata: return
+        pos=event.GetPosition()
+        width, height = self.canvas.get_width_height()
+        pos[1] = height - pos[1]
+        xpick_data,ypick_data = pos
+        xdata_org = self.xdata
+        ydata_org = self.ydata
+        data_corrected = self.eqarea.transData.transform(vstack([xdata_org,ydata_org]).T)
+        xdata,ydata = data_corrected.T
+        xdata = map(float,xdata)
+        ydata = map(float,ydata)
+        e = 4e0
+
+        for i,(x,y) in enumerate(zip(xdata,ydata)):
+            if 0 < sqrt((x-xpick_data)**2. + (y-ypick_data)**2.) < e:
+                index = i
+                break
+
+        self.change_selected(index)
+
+    def on_change_plot_cursor(self,event):
+        """
+        If mouse is over data point making it selectable change the shape of the cursor
+        @param: event -> the wx Mouseevent for that click
+        """
+        if not self.xdata or not self.ydata: return
+        pos=event.GetPosition()
+        width, height = self.canvas.get_width_height()
+        pos[1] = height - pos[1]
+        xpick_data,ypick_data = pos
+        xdata_org = self.xdata
+        ydata_org = self.ydata
+        data_corrected = self.eqarea.transData.transform(vstack([xdata_org,ydata_org]).T)
+        xdata,ydata = data_corrected.T
+        xdata = map(float,xdata)
+        ydata = map(float,ydata)
+        e = 4e0
+
+        if self.plot_setting == "Zoom":
+            self.canvas.SetCursor(wx.StockCursor(wx.CURSOR_CROSS))
+        else:
+            self.canvas.SetCursor(wx.StockCursor(wx.CURSOR_ARROW))
+        for i,(x,y) in enumerate(zip(xdata,ydata)):
+            if 0 < sqrt((x-xpick_data)**2. + (y-ypick_data)**2.) < e:
+                self.canvas.SetCursor(wx.StockCursor(wx.CURSOR_HAND))
+                break
+        event.Skip()
+
+    def on_home_plot(self,event):
+        self.toolbar.home()
+
+    def on_pan_zoom_plot(self,event):
+        if event.LeftIsDown():
+            return
+        elif self.plot_setting == "Zoom":
+            self.plot_setting = "Pan"
+            try: self.toolbar.pan('off')
+            except TypeError: print('error in changing plot function to pan')
+        elif self.plot_setting == "Pan":
+            self.plot_setting = "Zoom"
+            try: self.toolbar.zoom()
+            except TypeError: print('error in changing plot function to zoom')
+
+    def on_level_box(self,event):
+        self.VGP_level=self.combo_box.GetValue()
+        self.fill_logger(); self.plot()
+
+    def draw_map(self):
+        #set basemap
+        self.map = Basemap(projection='moll',lon_0=self.mean_lon,resolution='c',ax=self.eqarea)
+        self.map.drawcoastlines(linewidth=.25)
+        self.map.fillcontinents(color='bisque',lake_color='white',zorder=1)
+        self.map.drawmapboundary(fill_color='white')
+        self.map.drawmeridians(range(0,390,30))
+        self.map.drawparallels(range(-90,120,30))
+
+    def plot(self):
+        self.eqarea.clear()
+        self.xdata,self.ydata = [],[]
+        data = self.VGP_Data[self.VGP_level]
+        self.draw_map()
+        ymin, ymax = self.eqarea.get_ylim()
+        xmin, xmax = self.eqarea.get_xlim()
+
+        for dp in data:
+            lat,lon = dp['vgp_lat'],dp['vgp_lon']
+            XYM=self.map(float(lon),float(lat))
+            FC=dp['color'];EC=dp['color']
+            if self.selected_pole==dp['name']+dp['comp_name']: marker='D'
+            else: marker='o'
+            self.map.scatter([XYM[0]],[XYM[1]],marker=marker,edgecolor=EC, facecolor=FC,s=30,lw=1,clip_on=False,zorder=2)
+            self.xdata.append(XYM[0]);self.ydata.append(XYM[1])
+
+        #consider adding ellipse for uncertinties
+        self.eqarea.set_xlim(xmin, xmax)
+        self.eqarea.set_ylim(ymin, ymax)
+
+        self.canvas.draw()
+
+    def fill_logger(self):
+        self.logger.DeleteAllItems(); self.dp_list = []
+        data = self.VGP_Data[self.VGP_level]
+        for i,dp in enumerate(data): self.update_logger_entry(i,dp)
+
+    def update_logger_entry(self,i,pars):
+
+        if len(self.dp_list)>i:
+            self.dp_list.pop(i)
+        self.dp_list.insert(i,pars['name']+pars['comp_name'])
+
+        if i < self.logger.GetItemCount():
+            self.logger.DeleteItem(i)
+        self.logger.InsertStringItem(i, str(pars['name']))
+        self.logger.SetStringItem(i, 1, str(pars['comp_name']))
+        self.logger.SetStringItem(i, 2, str(pars['vgp_lat']))
+        self.logger.SetStringItem(i, 3, str(pars['vgp_lon']))
+        self.logger.SetStringItem(i, 4, str(pars['vgp_dp']))
+        self.logger.SetStringItem(i, 5, str(pars['vgp_dm']))
+        self.logger.SetStringItem(i, 6, str(pars['n']))
+        self.logger.SetItemBackgroundColour(i,"WHITE")
+        if self.selected_pole_index==i:
+            self.selected_pole=pars['name']+pars['comp_name']
+            self.logger.SetItemBackgroundColour(i,"LIGHT BLUE")
+
+    def change_selected(self,i):
+        old_pole_index = self.selected_pole_index
+        self.selected_pole_index = i
+        self.logger.SetItemBackgroundColour(old_pole_index,"WHITE")
+        self.logger.SetItemBackgroundColour(self.selected_pole_index,"LIGHT BLUE")
+        self.selected_pole = self.dp_list[self.selected_pole_index]
+        self.plot()
+
+    def on_click_listctrl(self,event):
+        self.change_selected(event.GetIndex())
+
+#--------------------------------------------------------------
 # MagIc results tables dialog
 #--------------------------------------------------------------
 
 class magic_pmag_specimens_table_dialog(wx.Dialog):
     def __init__(self,parent):
-        super(magic_pmag_specimens_table_dialog, self).__init__(parent, title="MagIC pmag specimens table Dialog")
+        super(magic_pmag_specimens_table_dialog, self).__init__(parent, title="MagIC specimens table Dialog")
         self.InitUI()
-        
 
     def InitUI(self):
 
@@ -47,7 +274,7 @@ class magic_pmag_specimens_table_dialog(wx.Dialog):
         #---------------------
         # choose coordinate system
         #---------------------
-        self.coor_text=wx.StaticText(pnl1,label="choose which coordinate systems to save in pmag specimens table:",style=wx.TE_CENTER)
+        self.coor_text=wx.StaticText(pnl1,label="choose which coordinate systems to save in specimens table:",style=wx.TE_CENTER)
         #self.rb_spec_coor = wx.RadioButton(pnl1, -1, 'specimen', (10, 10), style=wx.RB_GROUP)
         #self.rb_geo_coor = wx.RadioButton(pnl1, -1, 'geographic', (10, 30))
         #self.rb_tilt_coor = wx.RadioButton(pnl1, -1, 'tilt-corrected', (10, 30))
@@ -112,7 +339,7 @@ class user_input(wx.Dialog):
     Generic user input dialog that asks for input any set of inputs into a series of TextCtrls
     """
 
-    def __init__(self,parent,inputs,parse_funcs=[],heading=None,title="User Input Required"):
+    def __init__(self,parent,inputs,parse_funcs=[],heading=None,title="User Input Required",values=[]):
         """
         @param: parent - the wx.Frame calling the dialog
         @param: inputs - a list of strings giving the names of the inputs wanted
@@ -122,9 +349,9 @@ class user_input(wx.Dialog):
         super(user_input, self).__init__(parent, title=title)
         self.inputs = inputs
         self.parse_funcs = parse_funcs
-        self.InitUI(heading)
+        self.InitUI(heading,values=values)
 
-    def InitUI(self,heading):
+    def InitUI(self,heading,values=[]):
 
         #make header and panel
         pnl1 = wx.Panel(self)
@@ -135,9 +362,10 @@ class user_input(wx.Dialog):
         #make inputs
         list_ctrls_for_window=[]
         self.list_ctrls=[]
-        for inp in self.inputs:
+        if len(values) != len(self.inputs): values = ['' for _ in range(len(self.inputs))]
+        for inp,val in zip(self.inputs,values):
             list_ctrls_for_window.append((wx.StaticText(pnl1,label=inp,style=wx.TE_CENTER), wx.EXPAND))
-            self.list_ctrls.append(wx.TextCtrl(pnl1,style=wx.TE_CENTER,size=(200,20)))
+            self.list_ctrls.append(wx.TextCtrl(pnl1,value=str(val),style=wx.TE_CENTER,size=(200,20)))
             list_ctrls_for_window.append(self.list_ctrls[-1])
 
         ctrl_window = wx.GridSizer(2, len(self.list_ctrls), 6, 6)

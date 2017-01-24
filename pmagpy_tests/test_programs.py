@@ -7,9 +7,11 @@ import shutil
 import sys
 from pkg_resources import resource_filename
 import programs
+
+# set constants
 fname = resource_filename(programs.__name__, 'angle.py')
 programs_WD = os.path.split(fname)[0]
-env = TestFileEnvironment('./new-test-output')
+#env = TestFileEnvironment('./new-test-output')
 
 
 @unittest.skipIf(sys.platform not in ['darwin', 'win32', 'win62'],
@@ -33,14 +35,14 @@ class TestProgramsHelp(unittest.TestCase):
     def setUp(self):
         if os.path.exists('./new-test-output'):
             shutil.rmtree('./new-test-output')
-
-        if not os.path.exists('./new-test-output'):
-            os.mkdir('./new-test-output')
+        self.env = TestFileEnvironment('./new-test-output')
+        #if not os.path.exists('./new-test-output'):
+        #    os.mkdir('./new-test-output')
 
     def tearDown(self):
         if os.path.exists('./new-test-output'):
             shutil.rmtree('./new-test-output')
-        
+
     def test_cmd_line(self):
         print 'programs_WD', programs_WD
         programs = os.listdir(programs_WD)
@@ -58,7 +60,7 @@ class TestProgramsHelp(unittest.TestCase):
                 continue
             if sys.platform in ['win32', 'win62']:
                 prog = prog[:-3]
-            res = env.run(prog, '-h')
+            res = self.env.run(prog, '-h')
             #except AssertionError as ex:
             #    not_checked.append(prog)
             #    print 'ex', type(ex)
@@ -66,9 +68,21 @@ class TestProgramsHelp(unittest.TestCase):
         print 'not_checked', not_checked
 
     def test_guis(self):
-        tests = ['pmag_gui.py', 'magic_gui.py', 'demag_gui.py',
+        tests = ['pmag_gui.py', 'magic_gui.py', #'demag_gui.py',
                  'thellier_gui.py']
         for prog in tests:
             if sys.platform in ['win32', 'win62']:
                 prog = prog[:-3]
-            res = env.run(prog, '-h')
+            print 'testing:', prog
+            res = self.env.run(prog, '-h')
+
+    @unittest.skipIf('Anaconda' not in sys.version.split()[1], 'only needed for Anaconda')
+    def test_guis_anaconda(self):
+        tests = ['pmag_gui_anaconda', 'magic_gui_anaconda',
+                 'magic_gui2_anaconda',# 'demag_gui_anaconda',
+                 'thellier_gui_anaconda']
+        for prog in tests:
+            print 'testing:', prog
+            #res = self.env.run(prog, '-h')
+            res = os.system(prog + " -h")
+            self.assertEqual(res, 0)

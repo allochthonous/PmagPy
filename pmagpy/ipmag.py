@@ -16,27 +16,55 @@ import math
 #from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
 #from matplotlib.backends.backend_wx import NavigationToolbar2Wx
 from matplotlib.figure import Figure
-import SPD.mapping.map_magic as map_magic
+from mapping import map_magic
 
 
 def igrf(input_list):
     """
-    Prints out Declination, Inclination, Intensity from the IGRF model.
+    Determine Declination, Inclination, Intensity from the IGRF model.
+    (http://www.ngdc.noaa.gov/IAGA/vmod/igrf.html)
 
     Parameters
     ----------
     input_list : list with format [Date, Altitude, Latitude, Longitude]
     Date must be in format XXXX.XXXX with years and decimals of a year (A.D.)
+
+    Returns
+    ----------
+    igrf_array : array of IGRF values (0: dec; 1: inc; 2: intensity)
     """
-    x,y,z,f=pmag.doigrf(input_list[3]%360.,input_list[2],input_list[1],input_list[0])
-    Dir=pmag.cart2dir((x,y,z))
-    return Dir
+    x,y,z,f = pmag.doigrf(input_list[3]%360.,input_list[2],input_list[1],input_list[0])
+    igrf_array = pmag.cart2dir((x,y,z))
+    return igrf_array
 
 
 def igrf_print(igrf_array):
+    """
+    Print out Declination, Inclination, Intensity from an array returned from
+    the igrf function.
+    """
+
     print "Declination: %0.3f"%(igrf_array[0])
     print "Inclination: %0.3f"%(igrf_array[1])
-    print "Intensity: %0.3f nT"%(igrf_array[0])
+    print "Intensity: %0.3f nT"%(igrf_array[2])
+
+def dms2dd(degrees, minutes, seconds):
+    """
+    Convert latitude/longitude in degrees, minutes, seconds to decimal degrees
+
+    Parameters
+    ----------
+    degrees: degrees of latitude/longitude
+    minutes: minutes of latitude/longitude
+    seconds: seconds of latitude/longitude
+
+    Returns
+    ----------
+    decimal degrees of location
+
+    """
+    dd = float(degrees) + float(minutes)/60 + float(seconds)/(60*60);
+    return dd
 
 
 def fisher_mean(dec=None, inc=None, di_block=None):
@@ -48,8 +76,8 @@ def fisher_mean(dec=None, inc=None, di_block=None):
 
     Parameters
     ----------
-    dec: list of declinations
-    inc: list of inclinations
+    dec: list of declinations (or longitudes)
+    inc: list of inclinations (or latitudes)
 
     or
 
@@ -91,6 +119,32 @@ def bingham_mean(dec=None, inc=None, di_block=None):
         return pmag.dobingham(di_block)
 
 
+def kent_mean(dec=None, inc=None, di_block=None):
+    """
+    Calculates the Kent mean and associated parameters from either a list of
+    declination values and a separate list of inclination values or from a
+    di_block (a nested list a nested list of [dec,inc,1.0]). Returns a
+    dictionary with the Kent mean and statistical parameters.
+
+    Parameters
+    ----------
+    dec: list of declinations
+    inc: list of inclinations
+
+    or
+
+    di_block: a nested list of [dec,inc,1.0]
+
+    A di_block can be provided instead of dec, inc lists in which case it will
+    be used. Either dec, inc lists or a di_block need to passed to the function.
+    """
+    if di_block is None:
+        di_block = make_di_block(dec,inc)
+        return pmag.dokent(di_block,len(di_block))
+    else:
+        return pmag.dokent(di_block,len(di_block))
+
+
 def print_direction_mean(mean_dictionary):
     """
     Does a pretty job printing a Fisher mean and associated statistics for
@@ -115,7 +169,7 @@ def print_pole_mean(mean_dictionary):
     ----------
     mean_dictionary: output dictionary of pmag.fisher_mean
     """
-    print 'Plong: ' + str(round(mean_dictionary['dec'],1)) + '  Plat: ' + str(round(mean_dictionary['inc'],1))
+    print 'Plon: ' + str(round(mean_dictionary['dec'],1)) + '  Plat: ' + str(round(mean_dictionary['inc'],1))
     print 'Number of directions in mean (n): ' + str(mean_dictionary['n'])
     print 'Angular radius of 95% confidence (A_95): ' + str(round(mean_dictionary['alpha95'],1))
     print 'Precision parameter (k) estimate: ' + str(round(mean_dictionary['k'],1))
@@ -198,15 +252,15 @@ def unsquish(incs,f):
         length = len(incs)
         incs_unsquished = []
         for n in range(0,length):
-            inc_rad = incs[n]*np.pi/180. # convert to radians
+            inc_rad = np.deg2rad(incs[n]) # convert to radians
             inc_new_rad = (1./f)*np.tan(inc_rad)
-            inc_new = np.arctan(inc_new_rad)*180./np.pi # convert back to degrees
+            inc_new = np.rad2deg(np.arctan(inc_new_rad)) # convert back to degrees
             incs_unsquished.append(inc_new)
         return incs_unsquished
     except:
-        inc_rad = incs*np.pi/180. # convert to radians
+        inc_rad = np.deg2rad(incs) # convert to radians
         inc_new_rad = (1./f)*np.tan(inc_rad)
-        inc_new = np.arctan(inc_new_rad)*180./np.pi # convert back to degrees
+        inc_new = np.rad2deg(np.arctan(inc_new_rad)) # convert back to degrees
         return inc_new
 
 
@@ -769,8 +823,10 @@ def fishqq(lon=None, lat=None, di_block=None):
                 I1.append(irot)
                 Dtit='Mode 1 Declinations'
                 Itit='Mode 1 Inclinations'
-        Mu_n,Mu_ncr=pmagplotlib.plotQQunf(QQ['unf1'],D1,Dtit) # make plot
-        Me_n,Me_ncr=pmagplotlib.plotQQexp(QQ['exp1'],I1,Itit) # make plot
+        plt.figure(figsize=(6,3))
+        Mu_n,Mu_ncr=pmagplotlib.plotQQunf(QQ['unf1'],D1,Dtit,subplot=True) # make plot
+        Me_n,Me_ncr=pmagplotlib.plotQQexp(QQ['exp1'],I1,Itit,subplot=True) # make plot
+        plt.tight_layout()
         if Mu_n<=Mu_ncr and Me_n<=Me_ncr:
            F_n = 'consistent with Fisherian model'
         else:
@@ -800,8 +856,10 @@ def fishqq(lon=None, lat=None, di_block=None):
             I2.append(irot)
             Dtit='Mode 2 Declinations'
             Itit='Mode 2 Inclinations'
-        Mu_r,Mu_rcr=pmagplotlib.plotQQunf(QQ['unf2'],D2,Dtit) # make plot
-        Me_r,Me_rcr=pmagplotlib.plotQQexp(QQ['exp2'],I2,Itit) # make plot
+        plt.figure(figsize=(6,3))
+        Mu_r,Mu_rcr=pmagplotlib.plotQQunf(QQ['unf2'],D2,Dtit,subplot=True) # make plot
+        Me_r,Me_rcr=pmagplotlib.plotQQexp(QQ['exp2'],I2,Itit,subplot=True) # make plot
+        plt.tight_layout()
 
         if Mu_r<=Mu_rcr and Me_r<=Me_rcr:
            F_r = 'consistent with Fisherian model'
@@ -977,7 +1035,11 @@ def plot_di(dec=None, inc=None, di_block=None, color='k', marker='o', markersize
     Y_up = []
 
     if di_block is not None:
-        dec, inc = unpack_di_block(di_block)
+        di_lists = unpack_di_block(di_block)
+        if len(di_lists) == 3:
+            dec, inc, intensity = di_lists
+        if len(di_lists) == 2:
+            dec, inc = di_lists
 
     try:
         length = len(dec)
@@ -1057,16 +1119,56 @@ def plot_di_mean(dec,inc,a95,color='k',marker='o',markersize=20,label='',legend=
     plt.plot(Xcirc,Ycirc,c=color)
     plt.tight_layout()
 
+def plot_di_mean_bingham(bingham_dictionary,fignum=1,color='k',marker='o',markersize=20,label='',legend='no'):
+    """
+    Plot a mean direction (declination, inclination) bingham confidence ellipse.
 
-def plot_pole(mapname,plong,plat,A95,label='',color='k',marker='o',markersize=20,legend='no'):
+    Required Parameters
+    -----------
+    bingham_dictionary : a dictionary generated by the pmag.dobingham function
+
+    """
+    pars = []
+    pars.append(bingham_dictionary['dec'])
+    pars.append(bingham_dictionary['inc'])
+    pars.append(bingham_dictionary['Zeta'])
+    pars.append(bingham_dictionary['Zdec'])
+    pars.append(bingham_dictionary['Zinc'])
+    pars.append(bingham_dictionary['Eta'])
+    pars.append(bingham_dictionary['Edec'])
+    pars.append(bingham_dictionary['Einc'])
+
+    DI_dimap=pmag.dimap(bingham_dictionary['dec'],bingham_dictionary['inc'])
+    if bingham_dictionary['inc'] < 0:
+        plt.scatter(DI_dimap[0],DI_dimap[1],
+        edgecolors=color ,facecolors='white',
+        marker=marker,s=markersize,label=label)
+    if bingham_dictionary['inc'] >= 0:
+        plt.scatter(DI_dimap[0],DI_dimap[1],
+        edgecolors=color,facecolors=color,
+        marker=marker,s=markersize,label=label)
+    pmagplotlib.plotELL(fignum,pars,color,0,1)
+
+def plot_pole(mapname,plon,plat,A95,label='',color='k',marker='o',markersize=20,legend='no'):
     """
     This function plots a paleomagnetic pole and A95 error ellipse on whatever
     current map projection has been set using the basemap plotting library.
 
+    Before this function is called, a plot needs to be initialized with code
+    that looks something like:
+    >from mpl_toolkits.basemap import Basemap
+    >mapname = Basemap(projection='ortho',lat_0=35,lon_0=200)
+    >plt.figure(figsize=(6, 6))
+    >mapname.drawcoastlines(linewidth=0.25)
+    >mapname.fillcontinents(color='bisque',lake_color='white',zorder=1)
+    >mapname.drawmapboundary(fill_color='white')
+    >mapname.drawmeridians(np.arange(0,360,30))
+    >mapname.drawparallels(np.arange(-90,90,30))
+
     Required Parameters
     -----------
     mapname : the name of the current map that has been developed using basemap
-    plong : the longitude of the paleomagnetic pole being plotted (in degrees E)
+    plon : the longitude of the paleomagnetic pole being plotted (in degrees E)
     plat : the latitude of the paleomagnetic pole being plotted (in degrees)
     A95 : the A_95 confidence ellipse of the paleomagnetic pole (in degrees)
 
@@ -1078,23 +1180,34 @@ def plot_pole(mapname,plong,plat,A95,label='',color='k',marker='o',markersize=20
     label : the default is no label. Labels can be assigned.
     legend : the default is no legend ('no'). Putting 'yes' will plot a legend.
     """
-    centerlon, centerlat = mapname(plong,plat)
+    centerlon, centerlat = mapname(plon,plat)
     A95_km=A95*111.32
     mapname.scatter(centerlon,centerlat,marker=marker,color=color,s=markersize,label=label,zorder=101)
-    equi(mapname, plong, plat, A95_km,color)
+    equi(mapname, plon, plat, A95_km,color)
     if legend=='yes':
         plt.legend(loc=2)
 
 
-def plot_pole_colorbar(mapname,plong,plat,A95,cmap,vmin,vmax,label='',color='k',marker='o',markersize='20',alpha='1.0',legend='no'):
+def plot_pole_colorbar(mapname,plon,plat,A95,cmap,vmin,vmax,label='',color='k',marker='o',markersize='20',alpha='1.0',legend='no'):
     """
     This function plots a paleomagnetic pole and A95 error ellipse on whatever
     current map projection has been set using the basemap plotting library.
 
+    Before this function is called, a plot needs to be initialized with code
+    that looks something like:
+    >from mpl_toolkits.basemap import Basemap
+    >mapname = Basemap(projection='ortho',lat_0=35,lon_0=200)
+    >plt.figure(figsize=(6, 6))
+    >mapname.drawcoastlines(linewidth=0.25)
+    >mapname.fillcontinents(color='bisque',lake_color='white',zorder=1)
+    >mapname.drawmapboundary(fill_color='white')
+    >mapname.drawmeridians(np.arange(0,360,30))
+    >mapname.drawparallels(np.arange(-90,90,30))
+
     Required Parameters
     -----------
     mapname : the name of the current map that has been developed using basemap
-    plong : the longitude of the paleomagnetic pole being plotted (in degrees E)
+    plon : the longitude of the paleomagnetic pole being plotted (in degrees E)
     plat : the latitude of the paleomagnetic pole being plotted (in degrees)
     A95 : the A_95 confidence ellipse of the paleomagnetic pole (in degrees)
 
@@ -1105,10 +1218,10 @@ def plot_pole_colorbar(mapname,plong,plat,A95,cmap,vmin,vmax,label='',color='k',
     marker : the marker shape desired for the pole mean symbol (default is 'o' aka a circle)
     legend : the default is no legend ('no'). Putting 'yes' will plot a legend.
     """
-    centerlon, centerlat = mapname(plong,plat)
+    centerlon, centerlat = mapname(plon,plat)
     A95_km=A95*111.32
-    mapname.scatter(centerlon,centerlat,c=cmap,vmin=vmin,vmax=vmax,s=markersize,marker=marker,color=color,alpha=alpha,label=label,zorder=101)
-    equi_colormap(mapname, plong, plat, A95_km, color, alpha)
+    mapname.scatter(centerlon,centerlat,c=cmap,vmin=vmin,vmax=vmax,s=markersize,marker=marker,alpha=alpha,label=label,zorder=101)
+    equi_colormap(mapname, plon, plat, A95_km, color, alpha)
     if legend=='yes':
         plt.legend(loc=2)
 
@@ -1118,10 +1231,21 @@ def plot_vgp(mapname,vgp_lon=None,vgp_lat=None,di_block=None,label='',color='k',
     This function plots a paleomagnetic pole on whatever current map projection
     has been set using the basemap plotting library.
 
+    Before this function is called, a plot needs to be initialized with code
+    that looks something like:
+    >from mpl_toolkits.basemap import Basemap
+    >mapname = Basemap(projection='ortho',lat_0=35,lon_0=200)
+    >plt.figure(figsize=(6, 6))
+    >mapname.drawcoastlines(linewidth=0.25)
+    >mapname.fillcontinents(color='bisque',lake_color='white',zorder=1)
+    >mapname.drawmapboundary(fill_color='white')
+    >mapname.drawmeridians(np.arange(0,360,30))
+    >mapname.drawparallels(np.arange(-90,90,30))
+
     Required Parameters
     -----------
     mapname : the name of the current map that has been developed using basemap
-    plong : the longitude of the paleomagnetic pole being plotted (in degrees E)
+    plon : the longitude of the paleomagnetic pole being plotted (in degrees E)
     plat : the latitude of the paleomagnetic pole being plotted (in degrees)
 
     Optional Parameters (defaults are used if not specified)
@@ -1132,7 +1256,11 @@ def plot_vgp(mapname,vgp_lon=None,vgp_lat=None,di_block=None,label='',color='k',
     legend : the default is no legend ('no'). Putting 'yes' will plot a legend.
     """
     if di_block!=None:
-        vgp_lon,vgp_lat = unpack_di_block(di_block)
+        di_lists = unpack_di_block(di_block)
+        if len(di_lists) == 3:
+            vgp_lon,vgp_lat, intensity = di_lists
+        if len(di_lists) == 2:
+            vgp_lon,vgp_lat = di_lists
     centerlon, centerlat = mapname(vgp_lon,vgp_lat)
     mapname.scatter(centerlon,centerlat,20,marker=marker,color=color,label=label,zorder=100)
     if legend=='yes':
@@ -2318,8 +2446,8 @@ def download_magic(infile, dir_path='.', input_dir_path='.',
     if 'locations' in type_list:
         locs,file_type=pmag.magic_read(os.path.join(dir_path, 'locations.txt'))
     if len(locs)>0: # at least one location
-        for loc in locs:
-            loc_name = loc['location']
+        # go through unique location names
+        for loc_name in set([loc.get('location') for loc in locs]):
             if print_progress==True:
                 print 'location_'+str(locnum)+": ", loc_name
             lpath=dir_path+'/Location_'+str(locnum)
@@ -3100,7 +3228,7 @@ def specimens_results_magic(infile='pmag_specimens.txt', measfile='magic_measure
                 sitedat=pmag.get_dictitem(SiteNFO,'er_site_name',PmagSiteRec['er_site_name'],'T')[0] # fish out site information (lat/lon, etc.)
                 lat=float(sitedat['site_lat'])
                 lon=float(sitedat['site_lon'])
-                plong,plat,dp,dm=pmag.dia_vgp(dec,inc,a95,lat,lon) # get the VGP for this site
+                plon,plat,dp,dm=pmag.dia_vgp(dec,inc,a95,lat,lon) # get the VGP for this site
                 if PmagSiteRec['site_tilt_correction']=='-1':C=' (spec coord) '
                 if PmagSiteRec['site_tilt_correction']=='0':C=' (geog. coord) '
                 if PmagSiteRec['site_tilt_correction']=='100':C=' (strat. coord) '
@@ -3132,7 +3260,7 @@ def specimens_results_magic(infile='pmag_specimens.txt', measfile='magic_measure
                 site_height=pmag.get_dictitem(height_nfo,'er_site_name',site,'T')
                 if len(site_height)>0:PmagResRec["average_height"]=site_height[0]['site_height']
                 PmagResRec["vgp_lat"]='%7.1f ' % (plat)
-                PmagResRec["vgp_lon"]='%7.1f ' % (plong)
+                PmagResRec["vgp_lon"]='%7.1f ' % (plon)
                 PmagResRec["vgp_dp"]='%7.1f ' % (dp)
                 PmagResRec["vgp_dm"]='%7.1f ' % (dm)
                 PmagResRec["magic_method_codes"]= PmagSiteRec["magic_method_codes"]
@@ -3575,6 +3703,7 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
         if 'participants' in OrRec.keys() and OrRec['participants']!="" and OrRec['participants']!=participantlist:
             participantlist=OrRec['participants']
         MagRec['er_scientist_mail_names']=participantlist
+        MagRec.pop("participantlist")
         newlat=OrRec["lat"]
         if newlat!="":
             lat=float(newlat)
@@ -3873,9 +4002,11 @@ is the percent cooling rate factor to apply to specimens from this sample, DA-CR
         SampsOut3 = []
         Sites3 = []
         for samp_rec in SampsOut:
-            SampsOut3.append(map_magic.mapping(samp_rec, map_magic.samp_magic2_2_magic3_map))
+            new_rec = map_magic.mapping(samp_rec, map_magic.samp_magic2_2_magic3_map)
+            SampsOut3.append(new_rec)
         for site_rec in Sites:
-            Sites3.append(map_magic.mapping(site_rec, map_magic.site_magic2_2_magic3_map))
+            new_rec = map_magic.mapping(site_rec, map_magic.site_magic2_2_magic3_map)
+            Sites3.append(new_rec)
         wrote_samps = pmag.magic_write(samp_file,SampsOut3,"samples")
         wrote_sites = pmag.magic_write(site_file,Sites3,"sites")
     else:
@@ -6819,16 +6950,202 @@ def find_ei(data, nb=1000, save = False, save_folder = '.', fmt='svg',
     pmagplotlib.plotVs(cdf_fig_num,[Io],'k','-')
 
     # plot corrected directional data
-    decs, incs = unpack_di_block(data)
-    unsquished_incs = unsquish(incs, flat_f)
-    plt.figure(num=4,figsize=(4,4))
-    plot_net(4)
-    plot_di(decs,unsquished_incs)
 
+    di_lists = unpack_di_block(data)
+    if len(di_lists) == 3:
+        decs, incs, intensity = di_lists
+    if len(di_lists) == 2:
+        decs, incs = di_lists
+    if flat_f:
+        unsquished_incs = unsquish(incs, flat_f)
+        plt.figure(num=4,figsize=(4,4))
+        plot_net(4)
+        plot_di(decs,unsquished_incs)
+    else:
+        plt.figure(num=4,figsize=(4,4))
+        plot_net(4)
+        plot_di(decs,incs)
+
+    if (Inc, Elong, flat_f) == (0, 0, 0):
+        print "PATHOLOGICAL DISTRIBUTION"
     print "The original inclination was: " + str(Io)
     print ""
     print "The corrected inclination is: " + str(Inc)
     print "with bootstrapped confidence bounds of: " +  str(I[lower]) + ' to ' + str(I[upper])
     print "and elongation parameter of: " + str(Elong)
+    print "The flattening factor is: " + str(flat_f)
     if return_new_dirs is True:
         return make_di_block(decs, unsquished_incs)
+
+def plate_rate_mc(pole1_plon,pole1_plat,pole1_kappa,pole1_N,pole1_age,pole1_age_error,
+                  pole2_plon,pole2_plat,pole2_kappa,pole2_N,pole2_age,pole2_age_error,
+                  ref_loc_lon,ref_loc_lat,samplesize=10000, plot=True,
+                  savefig=True, save_directory='./', figure_name=''):
+    """
+    Determine the latitudinal motion implied by a pair of poles and utilize
+    the Monte Carlo sampling method of Swanson-Hysell (2014) to determine the
+    associated uncertainty.
+
+    These values are required for pole1 and pole2:
+    ----------------------------
+    plon : longitude of pole
+    plat : latitude of pole
+    kappa : Fisher precision parameter for VPGs in pole
+    N : number of VGPs in pole
+    age : age assigned to pole in Ma
+    age_error : 1 sigma age uncertainty in million years
+
+    Additional required parameters:
+    ----------------------------
+    ref_loc_lon : longitude of reference location
+    ref_loc_lat : latitude of reference location
+    samplesize : number of draws from pole and age distributions (default set to 10000)
+
+    Optional parameters for plotting and saving figures (3 are generated):
+    ----------------------------
+    plot : whether to make figures (default is True)
+    savefig : whether to save figures (default is True)
+    save_directory = default is local directory
+    figure_name = prefix for file names
+
+    Returns
+    ----------------------------
+    rate, 2.5 percentile rate, 97.5 percentile rate
+    """
+    from mpl_toolkits.basemap import Basemap
+    from scipy import stats
+
+    ref_loc = [ref_loc_lon,ref_loc_lat]
+    pole1 = (pole1_plon, pole1_plat)
+    pole1_paleolat = 90-pmag.angle(pole1,ref_loc)
+    pole2=(pole2_plon, pole2_plat)
+    pole2_paleolat = 90-pmag.angle(pole2,ref_loc)
+    print "The paleolatitude for ref_loc resulting from pole 1 is:" + str(pole1_paleolat)
+    print "The paleolatitude for ref_loc resulting from pole 2 is:" + str(pole2_paleolat)
+    rate=((pole1_paleolat-pole2_paleolat)*111*100000)/((pole1_age-pole2_age)*1000000)
+    print "The rate of paleolatitudinal change implied by the poles pairs in cm/yr is:" + str(rate)
+
+    pole1_MCages = np.random.normal(pole1_age,pole1_age_error,samplesize)
+    pole2_MCages = np.random.normal(pole2_age,pole2_age_error,samplesize)
+
+    plt.hist(pole1_MCages,100,histtype='stepfilled',color='darkred',label='Pole 1 ages')
+    plt.hist(pole2_MCages,100,histtype='stepfilled',color='darkblue',label='Pole 2 ages')
+    plt.xlabel('Age (Ma)')
+    plt.ylabel('n')
+    plt.legend(loc=3)
+    if savefig == True:
+        plot_extension = '_1.svg'
+        plt.savefig(save_directory + figure_name + plot_extension)
+    plt.show()
+
+    pole1_MCpoles = []
+    pole1_MCpole_lat = []
+    pole1_MCpole_long = []
+    pole1_MCpaleolat = []
+    for n in range(samplesize):
+        vgp_samples = []
+        for vgp in range(pole1_N):
+            #pmag.dev returns a direction from a fisher distribution with specified kappa
+            direction_atN = pmag.fshdev(pole1_kappa)
+            #this direction is centered at latitude of 90 degrees and needs to be rotated
+            #to be centered on the mean pole position
+            tilt_direction = pole1_plon
+            tilt_amount = 90-pole1_plat
+            direction = pmag.dotilt(direction_atN[0],direction_atN[1],tilt_direction,tilt_amount)
+            vgp_samples.append([direction[0],direction[1],1.])
+        mean = pmag.fisher_mean(vgp_samples)
+        mean_pole_position = (mean['dec'],mean['inc'])
+        pole1_MCpoles.append([mean['dec'],mean['inc'],1.])
+        pole1_MCpole_lat.append(mean['inc'])
+        pole1_MCpole_long.append(mean['dec'])
+        paleolat = 90-pmag.angle(mean_pole_position,ref_loc)
+        pole1_MCpaleolat.append(paleolat[0])
+
+    pole2_MCpoles=[]
+    pole2_MCpole_lat=[]
+    pole2_MCpole_long=[]
+    pole2_MCpaleolat=[]
+    for n in range(samplesize):
+        vgp_samples=[]
+        for vgp in range(pole2_N):
+            #pmag.dev returns a direction from a fisher distribution with specified kappa
+            direction_atN=pmag.fshdev(pole2_kappa)
+            #this direction is centered at latitude of 90 degrees and needs to be rotated
+            #to be centered on the mean pole position
+            tilt_direction=pole2_plon
+            tilt_amount=90-pole2_plat
+            direction=pmag.dotilt(direction_atN[0],direction_atN[1],tilt_direction,tilt_amount)
+            vgp_samples.append([direction[0],direction[1],1.])
+        mean=pmag.fisher_mean(vgp_samples)
+        mean_pole_position=(mean['dec'],mean['inc'])
+        pole2_MCpoles.append([mean['dec'],mean['inc'],1.])
+        pole2_MCpole_lat.append(mean['inc'])
+        pole2_MCpole_long.append(mean['dec'])
+        paleolat=90-pmag.angle(mean_pole_position,ref_loc)
+        pole2_MCpaleolat.append(paleolat[0])
+
+    if plot is True:
+        plt.figure(figsize=(5, 5))
+        m = Basemap(projection='ortho',lat_0=35,lon_0=200,resolution='c',area_thresh=50000)
+        m.drawcoastlines(linewidth=0.25)
+        m.fillcontinents(color='bisque',lake_color='white',zorder=1)
+        m.drawmapboundary(fill_color='white')
+        m.drawmeridians(np.arange(0,360,30))
+        m.drawparallels(np.arange(-90,90,30))
+
+        plot_vgp(m,pole1_MCpole_long,pole1_MCpole_lat,color='b')
+        plot_vgp(m,pole2_MCpole_long,pole2_MCpole_lat,color='g')
+        if savefig == True:
+            plot_extension = '_2.svg'
+            plt.savefig(save_directory + figure_name + plot_extension)
+        plt.show()
+
+    #calculating the change in paleolatitude between the Monte Carlo pairs
+    pole1_pole2_Delta_degrees=[]
+    pole1_pole2_Delta_kilometers=[]
+    pole1_pole2_Delta_myr=[]
+    pole1_pole2_degrees_per_myr=[]
+    pole1_pole2_cm_per_yr=[]
+
+    for n in range(samplesize):
+        Delta_degrees=pole1_MCpaleolat[n]-pole2_MCpaleolat[n]
+        Delta_Myr=pole1_MCages[n]-pole2_MCages[n]
+        pole1_pole2_Delta_degrees.append(Delta_degrees)
+        degrees_per_myr=Delta_degrees/Delta_Myr
+        cm_per_yr=((Delta_degrees*111)*100000)/(Delta_Myr*1000000)
+        pole1_pole2_degrees_per_myr.append(degrees_per_myr)
+        pole1_pole2_cm_per_yr.append(cm_per_yr)
+
+    if plot is True:
+        plotnumber=100
+        plt.figure(num=None, figsize=(10, 4))
+        plt.subplot(1, 2, 1)
+        for n in range(plotnumber):
+            plt.plot([pole1_MCpaleolat[n],pole2_MCpaleolat[n]],
+                     [pole1_MCages[n],pole2_MCages[n]],'k-',linewidth=0.1,alpha=0.3)
+        plt.scatter(pole1_MCpaleolat[:plotnumber],pole1_MCages[:plotnumber],color='b',s=3)
+        plt.scatter(pole1_paleolat,pole1_age,color='lightblue',s=100, edgecolor='w', zorder=10000)
+        plt.scatter(pole2_MCpaleolat[:plotnumber],pole2_MCages[:plotnumber],color='g',s=3)
+        plt.scatter(pole2_paleolat,pole2_age,color='lightgreen',s=100, edgecolor='w', zorder=10000)
+        plt.plot([pole1_paleolat,pole2_paleolat],[pole1_age,pole2_age],'w-',linewidth=2)
+        plt.gca().invert_yaxis()
+        plt.xlabel('paleolatitude (degrees)',size=14)
+        plt.ylabel('time (Ma)',size=14)
+
+        plt.subplot(1, 2, 2)
+        plt.hist(pole1_pole2_cm_per_yr,bins=600)
+        plt.ylabel('n',size=14)
+        plt.xlabel('latitudinal drift rate (cm/yr)',size=14)
+        #plt.xlim([0,90])
+        if savefig == True:
+            plot_extension = '_3.svg'
+            plt.savefig(save_directory + figure_name + plot_extension)
+        plt.show()
+
+    twopointfive_percentile=stats.scoreatpercentile(pole1_pole2_cm_per_yr,2.5)
+    fifty_percentile=stats.scoreatpercentile(pole1_pole2_cm_per_yr,50)
+    ninetysevenpointfive_percentile=stats.scoreatpercentile(pole1_pole2_cm_per_yr,97.5)
+    print "2.5th percentile is: " + str(round(twopointfive_percentile,2)) + " cm/yr"
+    print "50th percentile is: " + str(round(fifty_percentile,2)) + " cm/yr"
+    print "97.5th percentile is: " + str(round(ninetysevenpointfive_percentile,2)) + " cm/yr"
+    return rate[0], twopointfive_percentile, ninetysevenpointfive_percentile

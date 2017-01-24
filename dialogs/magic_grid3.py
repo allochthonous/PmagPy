@@ -1,9 +1,10 @@
 #import matplotlib
 #matplotlib.use('WXAgg')
+import numpy as np
+import pandas as pd
 import wx
 import wx.grid
 import wx.lib.mixins.gridlabelrenderer as gridlabelrenderer
-
 
 class MagicGrid(wx.grid.Grid, gridlabelrenderer.GridWithLabelRenderersMixin):
     """
@@ -46,21 +47,35 @@ class MagicGrid(wx.grid.Grid, gridlabelrenderer.GridWithLabelRenderersMixin):
         # set column labels
         for n, col in enumerate(self.col_labels):
             self.SetColLabelValue(n, str(col))
-        # prevent horizontal scrollbar from showing up
-        # this doesn't work with all versions of wx
-        # so skip it if it's an older version
+        # set scrollbars
+        self.set_scrollbars()
+
+    def set_scrollbars(self):
+        """
+        Set to always have vertical scrollbar.
+        Have horizontal scrollbar unless grid has very few rows.
+        Older versions of wxPython will choke on this,
+        in which case nothing happens.
+        """
         try:
-            self.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_DEFAULT)
+            if len(self.row_labels) < 5:
+                show_horizontal = wx.SHOW_SB_NEVER
+            else:
+                show_horizontal = wx.SHOW_SB_DEFAULT
+            self.ShowScrollbars(show_horizontal, wx.SHOW_SB_DEFAULT)
         except AttributeError:
             pass
-        return data
 
-    def add_items(self, dataframe):  #items_list, incl_pmag=True, incl_parents=True):
+    def add_items(self, dataframe, hide_cols=()):
         """
         Add items and/or update existing items in grid
         """
         # replace "None" values with ""
         dataframe = dataframe.fillna("")
+        # remove any columns that shouldn't be shown
+        for col in hide_cols:
+            if col in dataframe.columns:
+                del dataframe[col]
         # add more rows
         self.AppendRows(len(dataframe))
         columns = dataframe.columns
@@ -71,10 +86,21 @@ class MagicGrid(wx.grid.Grid, gridlabelrenderer.GridWithLabelRenderersMixin):
             for col_num, col in enumerate(columns):
                 value = row[col]
                 self.SetCellValue(row_num, col_num, str(value))
+                # set citation default value
+                if col == 'citations':
+                    citation = row['citations']
+                    if (citation is None) or (citation is np.nan):
+                            self.SetCellValue(row_num, col_num, 'This study')
+                    else:
+                        if 'This study' not in citation:
+                            if len(citation):
+                                citation += ':'
+                            citation += 'This study'
+                            self.SetCellValue(row_num, col_num, citation)
         self.row_labels.extend(dataframe.index)
 
 
-    def save_items(self, rows=None):
+    def save_items(self, rows=None, verbose=False):
         """
         Return a dictionary of row data for selected rows:
         {1: {col1: val1, col2: val2}, ...}
@@ -90,7 +116,8 @@ class MagicGrid(wx.grid.Grid, gridlabelrenderer.GridWithLabelRenderersMixin):
             data[row] = {}
             for col in cols:
                 col_name = self.GetColLabelValue(col)
-                print col_name, ":", self.GetCellValue(row, col)
+                if verbose:
+                    print col_name, ":", self.GetCellValue(row, col)
                 data[row][col_name] = self.GetCellValue(row, col)
         return data
 
@@ -161,61 +188,44 @@ class MagicGrid(wx.grid.Grid, gridlabelrenderer.GridWithLabelRenderersMixin):
         self.do_paste(event)
 
     def do_paste(self, event):
-        data_obj = wx.TextDataObject()
-        col = self.GetGridCursorCol()
-        row = self.GetGridCursorRow()
-        num_cols = self.GetNumberCols()
-
-        if wx.TheClipboard.Open():
-            wx.TheClipboard.GetData(data_obj)
-            text = data_obj.GetText()
-            # if text ends with a newline, strip that away
-            if text.endswith('\n'):
-                text = text[:-1]
-            if text.endswith('\r'):
-                text = text[:-1]
-            # find newline character delimiter
-            if '\r\n' in text:
-                newline_char = '\r\n'
-            elif '\r' in text:
-                newline_char = '\r'
-            elif '\n' in text:
-                newline_char = '\n'
+        """
+        Read clipboard into dataframe
+        Paste data into grid, adding extra rows if needed
+        and ignoring extra columns.
+        """
+        # find where the user has clicked
+        col_ind = self.GetGridCursorCol()
+        row_ind = self.GetGridCursorRow()
+        # read in clipboard text
+        text_df = pd.read_clipboard(header=None, sep='\t').fillna('')
+        # add extra rows if need to accomadate clipboard text
+        row_length_diff = len(text_df) - (len(self.row_labels) - row_ind)
+        if row_length_diff > 0:
+            for n in range(row_length_diff):
+                self.add_row()
+        # ignore excess columns if present
+        col_length_diff = len(text_df.columns) - (len(self.col_labels) - col_ind)
+        #print "len(text_df.columns) -  (len(self.col_labels) - col_ind)"
+        #print len(text_df.columns), " - ", "(", len(self.col_labels), "-", col_ind, ")"
+        #print 'col_length_diff', col_length_diff
+        if col_length_diff > 0:
+            text_df = text_df.iloc[:, :-col_length_diff].copy()
+        # go through copied text and parse it into the grid rows
+        for label, row_data in text_df.iterrows():
+            col_range = range(col_ind, col_ind + len(row_data))
+            if len(row_data) > 1:
+                cols = zip(col_range, row_data.index)
+                for column in cols:
+                    value = row_data[column[1]]
+                    this_col = column[0]
+                    self.SetCellValue(row_ind, this_col, value)
             else:
-                newline_char = '\n'
-            # split text and write it to the appropriate cells
-            if newline_char in text or '\t' in text:
-                # split text into a list of row data
-                text_list = text.split(newline_char)
-                num_rows = self.GetNumberRows()
-                for text_row in text_list:
-                    # add an extra row if needed
-                    if row > num_rows - 1:
-                        self.add_row()
-                        num_rows += 1
-                    # split row data into cols
-                    if text_row.endswith('\t'):
-                        text_row = text_row[:-1]
-                    if '\t' in text_row:
-                        text_items = text_row.split('\t')
-                        for num, item in enumerate(text_items):
-                            if (col + num) < num_cols:
-                                self.SetCellValue(row, col + num, item)
-                    # unless there is only one column
-                    else:
-                        self.SetCellValue(row, col, text_row)
-                    # note changes
-                    if not self.changes:
-                        self.changes = set()
-                    self.changes.add(row)
-                    row += 1
-
-            else:
-                # simple pasting
-                self.SetCellValue(row, col, text)
-                self.ForceRefresh()
+                value = row_data[0]
+                self.SetCellValue(row_ind, col_ind, value)
+            row_ind += 1
+        # could instead use wxPython clipboard here
+        # see old git history for that
         self.size_grid()
-        wx.TheClipboard.Close()
         event.Skip()
 
     def add_row(self, label=""):
@@ -279,7 +289,7 @@ class MagicGrid(wx.grid.Grid, gridlabelrenderer.GridWithLabelRenderersMixin):
         Remove a column from the grid.
         Resize grid to display correctly.
         """
-        label_value = self.GetColLabelValue(col_num).strip('**')
+        label_value = self.GetColLabelValue(col_num).strip('**').strip('^^')
         self.col_labels.remove(label_value)
         result = self.DeleteCols(pos=col_num, numCols=1, updateLabels=True)
         self.size_grid()
@@ -339,12 +349,16 @@ class MagicGrid(wx.grid.Grid, gridlabelrenderer.GridWithLabelRenderersMixin):
 
     def remove_starred_labels(self):#, grid):
         cols_with_stars = []
+        cols_with_hats = []
         for col in xrange(self.GetNumberCols()):
             label = self.GetColLabelValue(col)
             if '**' in label:
                 self.SetColLabelValue(col, label.strip('**'))
                 cols_with_stars.append(col)
-        return cols_with_stars
+            if '^^' in label:
+                self.SetColLabelValue(col, label.strip('^^'))
+                cols_with_hats.append(col)
+        return cols_with_stars, cols_with_hats
 
     def paint_invalid_row(self, row, color="LIGHT BLUE"):
         self.SetRowLabelRenderer(row, MyRowLabelRenderer(color))

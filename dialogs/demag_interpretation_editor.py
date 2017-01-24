@@ -1,16 +1,17 @@
 import wx, os, sys
-import pmagpy.check_updates as check_updates
+import pmagpy.find_pmag_dir as find_pmag_dir
 from copy import copy
 from numpy import vstack,sqrt
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigCanvas
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg as NavigationToolbar
-from pylab import Figure
+from matplotlib.figure import Figure
+import help_files.demag_interpretation_editor_help as dieh
 from pmagpy.demag_gui_utilities import *
 from pmagpy.Fit import *
 
 global CURRENT_VERSION, PMAGPY_DIRECTORY
 CURRENT_VERSION = "v.0.33"
-PMAGPY_DIRECTORY = check_updates.get_pmag_dir()
+PMAGPY_DIRECTORY = find_pmag_dir.get_pmag_dir()
 IMG_DIRECTORY = os.path.join(PMAGPY_DIRECTORY, 'dialogs', 'images')
 
 
@@ -24,8 +25,13 @@ class InterpretationEditorFrame(wx.Frame):
         self.parent = parent
         self.GUI_RESOLUTION=self.parent.GUI_RESOLUTION
         #call init of super class
-        wx.Frame.__init__(self, self.parent, title="Interpretation Editor",size=(675*self.GUI_RESOLUTION,425*self.GUI_RESOLUTION))
+        default_style = wx.MINIMIZE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER | wx.SYSTEM_MENU | wx.CAPTION | wx.CLOSE_BOX | wx.CLIP_CHILDREN | wx.NO_FULL_REPAINT_ON_RESIZE | wx.WS_EX_CONTEXTHELP | wx.FRAME_EX_CONTEXTHELP
+        wx.Frame.__init__(self, self.parent, title="Interpretation Editor",style=default_style, size=(675*self.GUI_RESOLUTION,425*self.GUI_RESOLUTION))
         self.Bind(wx.EVT_CLOSE, self.on_close_edit_window)
+        #setup wx help provider class to give help messages
+        provider = wx.SimpleHelpProvider()
+        wx.HelpProvider_Set(provider)
+        self.helper = wx.ContextHelp(doNow=False)
         #make the Panel
         self.panel = wx.Panel(self,-1,size=(700*self.GUI_RESOLUTION,450*self.GUI_RESOLUTION))
         #set icon
@@ -38,8 +44,9 @@ class InterpretationEditorFrame(wx.Frame):
         self.current_fit_index = None
         self.search_query = ""
         self.font_type = self.parent.font_type
-        #build UI
+        #build UI and menu
         self.init_UI()
+        self.create_menu()
         #update with stuff
         self.on_select_level_name(None)
 
@@ -49,8 +56,10 @@ class InterpretationEditorFrame(wx.Frame):
         """
 
         #set fonts
-        font1 = wx.Font(10, wx.SWISS, wx.NORMAL, wx.NORMAL, False, self.font_type)
-        font2 = wx.Font(13, wx.SWISS, wx.NORMAL, wx.NORMAL, False, self.font_type)
+        FONT_WEIGHT=1
+        if sys.platform.startswith('win'): FONT_WEIGHT=-1
+        font1 = wx.Font(9+FONT_WEIGHT, wx.SWISS, wx.NORMAL, wx.NORMAL, False, self.font_type)
+        font2 = wx.Font(12+FONT_WEIGHT, wx.SWISS, wx.NORMAL, wx.NORMAL, False, self.font_type)
 
         #if you're on mac do some funny stuff to make it look okay
         is_mac = False
@@ -60,24 +69,30 @@ class InterpretationEditorFrame(wx.Frame):
         self.search_bar = wx.SearchCtrl(self.panel, size=(350*self.GUI_RESOLUTION,25) ,style=wx.TE_PROCESS_ENTER | wx.TE_PROCESS_TAB | wx.TE_NOHIDESEL)
         self.Bind(wx.EVT_TEXT_ENTER, self.on_enter_search_bar,self.search_bar)
         self.Bind(wx.EVT_SEARCHCTRL_SEARCH_BTN, self.on_enter_search_bar,self.search_bar)
+        self.search_bar.SetHelpText(dieh.search_help)
 #        self.Bind(wx.EVT_TEXT, self.on_complete_search_bar,self.search_bar)
 
         #build logger
-        self.logger = wx.ListCtrl(self.panel, -1, size=(350*self.GUI_RESOLUTION,475*self.GUI_RESOLUTION),style=wx.LC_REPORT)
+        self.logger = wx.ListCtrl(self.panel, -1, size=(100*self.GUI_RESOLUTION,475*self.GUI_RESOLUTION),style=wx.LC_REPORT)
         self.logger.SetFont(font1)
-        self.logger.InsertColumn(0, 'specimen',width=55*self.GUI_RESOLUTION)
-        self.logger.InsertColumn(1, 'fit name',width=45*self.GUI_RESOLUTION)
-        self.logger.InsertColumn(2, 'max',width=35*self.GUI_RESOLUTION)
-        self.logger.InsertColumn(3, 'min',width=35*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(0, 'specimen',width=75*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(1, 'fit name',width=65*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(2, 'max',width=55*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(3, 'min',width=55*self.GUI_RESOLUTION)
         self.logger.InsertColumn(4, 'n',width=25*self.GUI_RESOLUTION)
         self.logger.InsertColumn(5, 'fit type',width=60*self.GUI_RESOLUTION)
-        self.logger.InsertColumn(6, 'dec',width=35*self.GUI_RESOLUTION)
-        self.logger.InsertColumn(7, 'inc',width=35*self.GUI_RESOLUTION)
-        self.logger.InsertColumn(8, 'mad',width=35*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(6, 'dec',width=45*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(7, 'inc',width=45*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(8, 'mad',width=45*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(9, 'dang',width=45*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(10, 'a95',width=45*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(11, 'K',width=45*self.GUI_RESOLUTION)
+        self.logger.InsertColumn(12, 'R',width=45*self.GUI_RESOLUTION)
         self.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.OnClick_listctrl, self.logger)
         self.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK,self.OnRightClickListctrl,self.logger)
+        self.logger.SetHelpText(dieh.logger_help)
 
-        #set fit attributes box
+        #set fit attributes boxsizers
         self.display_sizer = wx.StaticBoxSizer(wx.StaticBox(self.panel, wx.ID_ANY, "display options"), wx.HORIZONTAL)
         self.name_sizer = wx.StaticBoxSizer(wx.StaticBox(self.panel, wx.ID_ANY, "fit name/color"), wx.VERTICAL)
         self.bounds_sizer = wx.StaticBoxSizer(wx.StaticBox(self.panel, wx.ID_ANY, "fit bounds"), wx.VERTICAL)
@@ -94,18 +109,22 @@ class InterpretationEditorFrame(wx.Frame):
         if UPPER_LEVEL=='study':
             name_choices = ['this study']
 
-        self.level_box = wx.ComboBox(self.panel, -1, size=(100*self.GUI_RESOLUTION, 25), value=UPPER_LEVEL, choices=['sample','site','location','study'], style=wx.CB_DROPDOWN)
-        self.Bind(wx.EVT_COMBOBOX, self.on_select_higher_level,self.level_box)
+        self.level_box = wx.ComboBox(self.panel, -1, size=(110*self.GUI_RESOLUTION, 25), value=UPPER_LEVEL, choices=['sample','site','location','study'], style=wx.CB_DROPDOWN|wx.TE_READONLY)
+        self.Bind(wx.EVT_COMBOBOX, self.on_select_high_level,self.level_box)
+        self.level_box.SetHelpText(dieh.level_box_help)
 
-        self.level_names = wx.ComboBox(self.panel, -1, size=(100*self.GUI_RESOLUTION, 25), value=self.parent.level_names.GetValue(), choices=name_choices, style=wx.CB_DROPDOWN)
+        self.level_names = wx.ComboBox(self.panel, -1, size=(110*self.GUI_RESOLUTION, 25), value=self.parent.level_names.GetValue(), choices=name_choices, style=wx.CB_DROPDOWN|wx.TE_READONLY)
         self.Bind(wx.EVT_COMBOBOX, self.on_select_level_name,self.level_names)
+        self.level_names.SetHelpText(dieh.level_names_help)
 
         #mean type and plot display boxes
-        self.mean_type_box = wx.ComboBox(self.panel, -1, size=(100*self.GUI_RESOLUTION, 25), value=self.parent.mean_type_box.GetValue(), choices=['Fisher','Fisher by polarity','None'], style=wx.CB_DROPDOWN,name="high_type")
+        self.mean_type_box = wx.ComboBox(self.panel, -1, size=(110*self.GUI_RESOLUTION, 25), value=self.parent.mean_type_box.GetValue(), choices=['Fisher','Fisher by polarity','None'], style=wx.CB_DROPDOWN|wx.TE_READONLY, name="high_type")
         self.Bind(wx.EVT_COMBOBOX, self.on_select_mean_type_box,self.mean_type_box)
+        self.mean_type_box.SetHelpText(dieh.mean_type_help)
 
-        self.mean_fit_box = wx.ComboBox(self.panel, -1, size=(100*self.GUI_RESOLUTION, 25), value=self.parent.mean_fit, choices=(['None','All'] + self.parent.fit_list), style=wx.CB_DROPDOWN,name="high_type")
+        self.mean_fit_box = wx.ComboBox(self.panel, -1, size=(110*self.GUI_RESOLUTION, 25), value=self.parent.mean_fit, choices=(['None','All'] + self.parent.fit_list), style=wx.CB_DROPDOWN|wx.TE_READONLY, name="high_type")
         self.Bind(wx.EVT_COMBOBOX, self.on_select_mean_fit_box,self.mean_fit_box)
+        self.mean_fit_box.SetHelpText(dieh.mean_fit_help)
 
         #show box
         if UPPER_LEVEL == "study" or UPPER_LEVEL == "location":
@@ -115,25 +134,31 @@ class InterpretationEditorFrame(wx.Frame):
         if UPPER_LEVEL == "sample":
             show_box_choices = ['specimens']
 
-        self.show_box = wx.ComboBox(self.panel, -1, size=(100*self.GUI_RESOLUTION, 25), value='specimens', choices=show_box_choices, style=wx.CB_DROPDOWN,name="high_elements")
+        self.show_box = wx.ComboBox(self.panel, -1, size=(110*self.GUI_RESOLUTION, 25), value='specimens', choices=show_box_choices, style=wx.CB_DROPDOWN|wx.TE_READONLY,name="high_elements")
         self.Bind(wx.EVT_COMBOBOX, self.on_select_show_box,self.show_box)
+        self.show_box.SetHelpText(dieh.show_help)
 
         #coordinates box
-        self.coordinates_box = wx.ComboBox(self.panel, -1, size=(100*self.GUI_RESOLUTION, 25), choices=self.parent.coordinate_list, value=self.parent.coordinates_box.GetValue(), style=wx.CB_DROPDOWN, name="coordinates")
+        self.coordinates_box = wx.ComboBox(self.panel, -1, size=(110*self.GUI_RESOLUTION, 25), choices=self.parent.coordinate_list, value=self.parent.coordinates_box.GetValue(), style=wx.CB_DROPDOWN|wx.TE_READONLY, name="coordinates")
         self.Bind(wx.EVT_COMBOBOX, self.on_select_coordinates,self.coordinates_box)
+        self.coordinates_box.SetHelpText(dieh.coordinates_box_help)
 
         #bounds select boxes
-        self.tmin_box = wx.ComboBox(self.panel, -1, size=(80*self.GUI_RESOLUTION, 25), choices=[''] + self.parent.T_list, style=wx.CB_DROPDOWN, name="lower bound")
+        self.tmin_box = wx.ComboBox(self.panel, -1, size=(80*self.GUI_RESOLUTION, 25), choices=[''] + self.parent.T_list, style=wx.CB_DROPDOWN|wx.TE_READONLY, name="lower bound")
+        self.tmin_box.SetHelpText(dieh.tmin_box_help)
 
-        self.tmax_box = wx.ComboBox(self.panel, -1, size=(80*self.GUI_RESOLUTION, 25), choices=[''] + self.parent.T_list, style=wx.CB_DROPDOWN, name="upper bound")
+        self.tmax_box = wx.ComboBox(self.panel, -1, size=(80*self.GUI_RESOLUTION, 25), choices=[''] + self.parent.T_list, style=wx.CB_DROPDOWN|wx.TE_READONLY, name="upper bound")
+        self.tmax_box.SetHelpText(dieh.tmax_box_help)
 
         #color box
         self.color_dict = self.parent.color_dict
-        self.color_box = wx.ComboBox(self.panel, -1, size=(80*self.GUI_RESOLUTION, 25), choices=[''] + self.color_dict.keys(), style=wx.TE_PROCESS_ENTER, name="color")
+        self.color_box = wx.ComboBox(self.panel, -1, size=(80*self.GUI_RESOLUTION, 25), choices=[''] + sorted(self.color_dict.keys()), style=wx.CB_DROPDOWN|wx.TE_PROCESS_ENTER, name="color")
         self.Bind(wx.EVT_TEXT_ENTER, self.add_new_color, self.color_box)
+        self.color_box.SetHelpText(dieh.color_box_help)
 
         #name box
-        self.name_box = wx.TextCtrl(self.panel, -1, size=(80*self.GUI_RESOLUTION, 25), style=wx.HSCROLL, name="name")
+        self.name_box = wx.TextCtrl(self.panel, -1, size=(80*self.GUI_RESOLUTION, 25), name="name")
+        self.name_box.SetHelpText(dieh.name_box_help)
 
         #more mac stuff
         h_size_buttons,button_spacing = 25,5.5
@@ -143,18 +168,22 @@ class InterpretationEditorFrame(wx.Frame):
         self.add_all_button = wx.Button(self.panel, id=-1, label='add new fit to all specimens',size=(160*self.GUI_RESOLUTION,h_size_buttons))
         self.add_all_button.SetFont(font1)
         self.Bind(wx.EVT_BUTTON, self.add_fit_to_all, self.add_all_button)
+        self.add_all_button.SetHelpText(dieh.add_all_help)
 
         self.add_fit_button = wx.Button(self.panel, id=-1, label='add fit to highlighted specimens',size=(160*self.GUI_RESOLUTION,h_size_buttons))
         self.add_fit_button.SetFont(font1)
         self.Bind(wx.EVT_BUTTON, self.add_highlighted_fits, self.add_fit_button)
+        self.add_fit_button.SetHelpText(dieh.add_fit_btn_help)
 
         self.delete_fit_button = wx.Button(self.panel, id=-1, label='delete highlighted fits',size=(160*self.GUI_RESOLUTION,h_size_buttons))
         self.delete_fit_button.SetFont(font1)
         self.Bind(wx.EVT_BUTTON, self.delete_highlighted_fits, self.delete_fit_button)
+        self.delete_fit_button.SetHelpText(dieh.delete_fit_btn_help)
 
         self.apply_changes_button = wx.Button(self.panel, id=-1, label='apply changes to highlighted fits',size=(160*self.GUI_RESOLUTION,h_size_buttons))
         self.apply_changes_button.SetFont(font1)
         self.Bind(wx.EVT_BUTTON, self.apply_changes, self.apply_changes_button)
+        self.apply_changes_button.SetHelpText(dieh.apply_changes_help)
 
         #windows
         display_window_0 = wx.GridSizer(2, 1, 10*self.GUI_RESOLUTION, 19*self.GUI_RESOLUTION)
@@ -166,8 +195,8 @@ class InterpretationEditorFrame(wx.Frame):
         display_window_0.AddMany( [(self.coordinates_box, wx.ALIGN_LEFT),
                                    (self.show_box, wx.ALIGN_LEFT)] )
         display_window_1.AddMany( [(self.level_box, wx.ALIGN_LEFT),
-                                   (self.mean_type_box, wx.ALIGN_LEFT)] )
-        display_window_2.AddMany( [(self.level_names, wx.ALIGN_LEFT),
+                                   (self.level_names, wx.ALIGN_LEFT)] )
+        display_window_2.AddMany( [(self.mean_type_box, wx.ALIGN_LEFT),
                                    (self.mean_fit_box, wx.ALIGN_LEFT)] )
         name_window.AddMany( [(self.name_box, wx.ALIGN_LEFT),
                                 (self.color_box, wx.ALIGN_LEFT)] )
@@ -184,16 +213,18 @@ class InterpretationEditorFrame(wx.Frame):
         self.bounds_sizer.Add(bounds_window, 1, wx.TOP, 5.5)
         self.buttons_sizer.Add(buttons1_window, 1, wx.TOP, 0)
 
-        #duplicate higher levels plot
+        #duplicate high levels plot
         self.fig = Figure((2.5*self.GUI_RESOLUTION, 2.5*self.GUI_RESOLUTION), dpi=100)
         self.canvas = FigCanvas(self.panel, -1, self.fig, )
         self.toolbar = NavigationToolbar(self.canvas)
         self.toolbar.Hide()
         self.toolbar.zoom()
-        self.higher_EA_setting = "Zoom"
-        self.canvas.Bind(wx.EVT_LEFT_DCLICK,self.on_equalarea_higher_select)
-        self.canvas.Bind(wx.EVT_MOTION,self.on_change_higher_mouse_cursor)
-        self.canvas.Bind(wx.EVT_MIDDLE_DOWN,self.home_higher_equalarea)
+        self.high_EA_setting = "Zoom"
+        self.canvas.Bind(wx.EVT_LEFT_DCLICK,self.on_equalarea_high_select)
+        self.canvas.Bind(wx.EVT_MOTION,self.on_change_high_mouse_cursor)
+        self.canvas.Bind(wx.EVT_MIDDLE_DOWN,self.home_high_equalarea)
+        self.canvas.Bind(wx.EVT_RIGHT_DOWN,self.pan_zoom_high_equalarea)
+        self.canvas.SetHelpText(dieh.eqarea_help)
 
         self.eqarea = self.fig.add_subplot(111)
         draw_net(self.eqarea)
@@ -202,7 +233,7 @@ class InterpretationEditorFrame(wx.Frame):
         self.stats_sizer = wx.StaticBoxSizer( wx.StaticBox( self.panel, wx.ID_ANY,"mean statistics"  ), wx.VERTICAL)
 
         for parameter in ['mean_type','dec','inc','alpha95','K','R','n_lines','n_planes']:
-            COMMAND="self.%s_window=wx.TextCtrl(self.panel,style=wx.TE_CENTER|wx.TE_READONLY,size=(75*self.GUI_RESOLUTION,25))"%parameter
+            COMMAND="self.%s_window=wx.TextCtrl(self.panel,style=wx.TE_CENTER|wx.TE_READONLY,size=(100*self.GUI_RESOLUTION,25))"%parameter
             exec COMMAND
             COMMAND="self.%s_window.SetBackgroundColour(wx.WHITE)"%parameter
             exec COMMAND
@@ -219,6 +250,7 @@ class InterpretationEditorFrame(wx.Frame):
 
         self.switch_stats_button = wx.SpinButton(self.panel, id=wx.ID_ANY, style=wx.SP_HORIZONTAL|wx.SP_ARROW_KEYS|wx.SP_WRAP, name="change stats")
         self.Bind(wx.EVT_SPIN, self.on_select_stats_button,self.switch_stats_button)
+        self.switch_stats_button.SetHelpText(dieh.switch_stats_btn_help)
 
         #construct panel
         hbox0 = wx.BoxSizer(wx.HORIZONTAL)
@@ -250,12 +282,130 @@ class InterpretationEditorFrame(wx.Frame):
         self.panel.SetSizerAndFit(hbox2)
         hbox2.Fit(self)
 
+    def create_menu(self):
+
+        menubar = wx.MenuBar()
+
+        #--------------------------------------------------------------------
+
+        menu_file = wx.Menu()
+
+        m_change_WD = menu_file.Append(-1, "Change Working Directory\tCtrl-W","")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_change_working_directory, m_change_WD)
+
+        m_make_MagIC_results_tables = menu_file.Append(-1, "&Save MagIC pmag tables\tCtrl-Shift-S", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_make_MagIC_results_tables, m_make_MagIC_results_tables)
+
+        submenu_save_plots = wx.Menu()
+
+        m_save_high_level = submenu_save_plots.Append(-1, "&Save high level plot", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_save_high_level, m_save_high_level,"Eq")
+
+        m_new_sub_plots = menu_file.AppendMenu(-1, "&Save plot", submenu_save_plots)
+
+        menu_file.AppendSeparator()
+        m_exit = menu_file.Append(-1, "E&xit\tCtrl-Q", "Exit")
+        self.Bind(wx.EVT_MENU, self.on_close_edit_window, m_exit)
+
+        #--------------------------------------------------------------------
+
+        menu_Analysis = wx.Menu()
+
+        submenu_criteria = wx.Menu()
+
+        m_change_criteria_file = submenu_criteria.Append(-1, "&Change acceptance criteria", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_change_criteria, m_change_criteria_file)
+
+        m_import_criteria_file =  submenu_criteria.Append(-1, "&Import criteria file", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_criteria_file, m_import_criteria_file)
+
+        m_new_sub = menu_Analysis.AppendMenu(-1, "Acceptance criteria", submenu_criteria)
+
+        m_import_LSQ = menu_Analysis.Append(-1, "&Import Interpretations from LSQ file\tCtrl-L", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_read_from_LSQ, m_import_LSQ)
+
+        m_previous_interpretation = menu_Analysis.Append(-1, "&Import previous interpretations from a redo file\tCtrl-R", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_previous_interpretation, m_previous_interpretation)
+
+        m_save_interpretation = menu_Analysis.Append(-1, "&Save current interpretations to a redo file\tCtrl-S", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_save_interpretation, m_save_interpretation)
+
+        #--------------------------------------------------------------------
+
+        menu_Tools = wx.Menu()
+
+        m_view_VGP = menu_Tools.Append(-1, "&View VGPs\tCtrl-Shift-V", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_view_vgps, m_view_VGP)
+
+        #--------------------------------------------------------------------
+
+        menu_Help = wx.Menu()
+
+        m_help = menu_Help.Append(-1, "&Usage and Tips\tCtrl-H", "")
+        self.Bind(wx.EVT_MENU, self.on_menu_help, m_help)
+
+        m_cookbook = menu_Help.Append(-1, "&PmagPy Cookbook\tCtrl-Shift-W", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_cookbook, m_cookbook)
+
+        m_docs = menu_Help.Append(-1, "&Open Docs\tCtrl-Shift-H", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_docs, m_docs)
+
+        m_git = menu_Help.Append(-1, "&Github Page\tCtrl-Shift-G", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_git, m_git)
+
+        m_debug = menu_Help.Append(-1, "&Open Debugger\tCtrl-Shift-D", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_debug, m_debug)
+
+        #--------------------------------------------------------------------
+
+        menu_edit = wx.Menu()
+
+        m_new = menu_edit.Append(-1, "&New interpretation\tCtrl-N", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_btn_add_fit, m_new)
+
+        m_delete = menu_edit.Append(-1, "&Delete interpretation\tCtrl-D", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_btn_delete_fit, m_delete)
+
+        m_next_interp = menu_edit.Append(-1, "&Next interpretation\tCtrl-Up", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_next_interp, m_next_interp)
+
+        m_previous_interp = menu_edit.Append(-1, "&Previous interpretation\tCtrl-Down", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_prev_interp, m_previous_interp)
+
+        m_next_specimen = menu_edit.Append(-1, "&Next Specimen\tCtrl-Right", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_next_button, m_next_specimen)
+
+        m_previous_specimen = menu_edit.Append(-1, "&Previous Specimen\tCtrl-Left", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_prev_button, m_previous_specimen)
+
+        menu_coordinates = wx.Menu()
+
+        m_speci = menu_coordinates.Append(-1, "&Specimen Coordinates\tCtrl-P", "")
+        self.Bind(wx.EVT_MENU, self.parent.on_menu_change_speci_coord, m_speci)
+        if "geographic" in self.parent.coordinate_list:
+            m_geo = menu_coordinates.Append(-1, "&Geographic Coordinates\tCtrl-G", "")
+            self.Bind(wx.EVT_MENU, self.parent.on_menu_change_geo_coord, m_geo)
+        if "tilt-corrected" in self.parent.coordinate_list:
+            m_tilt = menu_coordinates.Append(-1, "&Tilt-Corrected Coordinates\tCtrl-T", "")
+            self.Bind(wx.EVT_MENU, self.parent.on_menu_change_tilt_coord, m_tilt)
+
+        m_coords = menu_edit.AppendMenu(-1, "&Coordinate Systems", menu_coordinates)
+
+        #--------------------------------------------------------------------
+
+        #self.menubar.Append(menu_preferences, "& Preferences")
+        menubar.Append(menu_file, "&File")
+        menubar.Append(menu_edit, "&Edit")
+        menubar.Append(menu_Analysis, "&Analysis")
+        menubar.Append(menu_Tools, "&Tools")
+        menubar.Append(menu_Help, "&Help")
+        self.SetMenuBar(menubar)
+
     ################################Logger Functions##################################
 
     def update_editor(self):
         """
         updates the logger and plot on the interpretation editor window
-        @param: changed_interpretation_parameters -> if the logger should be whipped and completely recalculated from scratch or not (default = True)
         """
 
         self.fit_list = []
@@ -286,7 +436,7 @@ class InterpretationEditorFrame(wx.Frame):
         coordinate_system = self.parent.COORDINATE_SYSTEM
         fit = tup[0]
         pars = fit.get(coordinate_system)
-        fmin,fmax,n,ftype,dec,inc,mad = "","","","","","",""
+        fmin,fmax,n,ftype,dec,inc,mad,dang,a95,sk,sr2 = "","","","","","","","","","",""
 
         specimen = tup[1]
         if coordinate_system=='geographic':
@@ -300,7 +450,7 @@ class InterpretationEditorFrame(wx.Frame):
         if pars == {} and self.parent.Data[specimen][block_key] != []:
             fit.put(specimen, coordinate_system, self.parent.get_PCA_parameters(specimen,fit,fit.tmin,fit.tmax,coordinate_system,fit.PCA_type))
             pars = fit.get(coordinate_system)
-        elif self.parent.Data[specimen][block_key]==[]:
+        if self.parent.Data[specimen][block_key]==[]:
             spars = fit.get('specimen')
             fmin = fit.tmin
             fmax = fit.tmax
@@ -311,26 +461,42 @@ class InterpretationEditorFrame(wx.Frame):
             dec = 'No Data'
             inc = 'No Data'
             mad = 'No Data'
+            dang = 'No Data'
+            a95 = 'No Data'
+            sk = 'No Data'
+            sr2 = 'No Data'
         else:
             if 'measurement_step_min' in pars.keys(): fmin = str(fit.tmin)
+            else: fmin = "N/A"
             if 'measurement_step_max' in pars.keys(): fmax = str(fit.tmax)
+            else: fmax = "N/A"
             if 'specimen_n' in pars.keys(): n = str(pars['specimen_n'])
+            else: n = "N/A"
             if 'calculation_type' in pars.keys(): ftype = pars['calculation_type']
+            else: ftype = "N/A"
             if 'specimen_dec' in pars.keys(): dec = "%.1f"%pars['specimen_dec']
+            else: dec = "N/A"
             if 'specimen_inc' in pars.keys(): inc = "%.1f"%pars['specimen_inc']
+            else: inc = "N/A"
             if 'specimen_mad' in pars.keys(): mad = "%.1f"%pars['specimen_mad']
+            else: mad = "N/A"
+            if 'specimen_dang' in pars.keys(): dang = "%.1f"%pars['specimen_dang']
+            else: dang = "N/A"
             if 'specimen_alpha95' in pars.keys(): a95 = "%.1f"%pars['specimen_alpha95']
+            else: a95 = "N/A"
             if 'specimen_k' in pars.keys(): sk = "%.1f"%pars['specimen_k']
-            if 'specimen_r' in pars.keys(): sr2 = "%.1f"%pars['specimen_r_sq']
+            else: sk = "N/A"
+            if 'specimen_r' in pars.keys(): sr2 = "%.1f"%pars['specimen_r']
+            else: sr2 = "N/A"
 
         if self.search_query != "":
-            entry = (specimen+name+fmin+fmax+n+ftype+dec+inc+mad).replace(" ","").lower()
+            entry = (specimen+name+fmin+fmax+n+ftype+dec+inc+mad+dang+a95+sk+sr2).replace(" ","").lower()
             if self.search_query not in entry:
                 self.fit_list.pop(i)
                 if i < self.logger.GetItemCount():
                     self.logger.DeleteItem(i)
                 return "s"
-        for e in (specimen,name,fmin,fmax,n,ftype,dec,inc,mad):
+        for e in (specimen,name,fmin,fmax,n,ftype,dec,inc,mad,dang,a95,sk,sr2):
             if e not in self.search_choices:
                 self.search_choices.append(e)
 
@@ -345,6 +511,10 @@ class InterpretationEditorFrame(wx.Frame):
         self.logger.SetStringItem(i, 6, dec)
         self.logger.SetStringItem(i, 7, inc)
         self.logger.SetStringItem(i, 8, mad)
+        self.logger.SetStringItem(i, 9, dang)
+        self.logger.SetStringItem(i, 10, a95)
+        self.logger.SetStringItem(i, 11, sk)
+        self.logger.SetStringItem(i, 12, sr2)
         self.logger.SetItemBackgroundColour(i,"WHITE")
         a,b = False,False
         if fit in self.parent.bad_fits:
@@ -371,6 +541,7 @@ class InterpretationEditorFrame(wx.Frame):
         if no parameters are passed in it sets first fit as current
         @param: new_fit -> fit object to highlight as selected
         """
+        if len(self.fit_list)==0: return
         if self.search_query and self.parent.current_fit not in map(lambda x: x[0], self.fit_list): return
         if self.current_fit_index == None:
             if not self.parent.current_fit: return
@@ -434,21 +605,21 @@ class InterpretationEditorFrame(wx.Frame):
         @param: event -> wx.ListCtrlEvent that triggered this function
         """
         i = event.GetIndex()
-        fit = self.fit_list[i][0]
+        fit,spec = self.fit_list[i][0],self.fit_list[i][1]
         if fit in self.parent.bad_fits:
-            self.parent.bad_fits.remove(fit)
+            if not self.parent.mark_fit_good(fit,spec=spec): return
             if i == self.current_fit_index:
                 self.logger.SetItemBackgroundColour(i,"LIGHT BLUE")
             else:
                 self.logger.SetItemBackgroundColour(i,"WHITE")
         else:
-            self.parent.bad_fits.append(fit)
+            if not self.parent.mark_fit_bad(fit): return
             if i == self.current_fit_index:
                 self.logger.SetItemBackgroundColour(i,"red")
             else:
                 self.logger.SetItemBackgroundColour(i,"red")
-        self.parent.calculate_higher_levels_data()
-        self.parent.plot_higher_levels_data()
+        self.parent.calculate_high_levels_data()
+        self.parent.plot_high_levels_data()
         self.logger_focus(i)
 
     ##################################Search Bar Functions###############################
@@ -462,21 +633,32 @@ class InterpretationEditorFrame(wx.Frame):
 
     ###################################ComboBox Functions################################
 
+    def update_bounds_boxes(self,B_list):
+        self.tmin_box.SetItems(B_list)
+        self.tmax_box.SetItems(B_list)
+
     def add_new_color(self,event):
         new_color = self.color_box.GetValue()
         if ':' in new_color:
             color_list = new_color.split(':')
             color_name = color_list[0]
-            color_val = map(eval, tuple(color_list[1].strip('( )').split(',')))
-            for val in color_val:
-                if val > 1 or val < 0: print("invalid RGB sequence"); return
+            if len(color_list[1])==7 and color_list[1].startswith('#'):
+                for c in color_list[1][1:]:
+                    if ord(c) < 48 or ord(c) > 70:
+                        self.parent.user_warning('invalid hex color must be of form #0F0F0F');return
+                color_val = color_list[1]
+            elif '(' in color_list[1] and ')' in color_list[1]:
+                color_val = map(eval, tuple(color_list[1].strip('( )').split(',')))
+                for val in color_val:
+                    if val > 1 or val < 0: self.parent.user_warning("invalid RGB sequence"); return
+            else: self.parent.user_warning("colors must be given as a valid hex color or rgb tuple"); return
         else:
-            return
+            self.parent.user_warning("New colors must be passed in as $colorname:$colorval where $colorval is a valid hex color or rgb tuple"); return
         self.color_dict[color_name] = color_val
         #clear old box
         self.color_box.Clear()
         #update fit box
-        self.color_box.SetItems([''] + self.color_dict.keys())
+        self.color_box.SetItems([''] + sorted(self.color_dict.keys()))
 
     def on_select_coordinates(self,event):
         self.parent.coordinates_box.SetStringSelection(self.coordinates_box.GetStringSelection())
@@ -484,14 +666,15 @@ class InterpretationEditorFrame(wx.Frame):
 
     def on_select_show_box(self,event):
         """
-
+        Changes the type of mean shown on the high levels mean plot so that single dots represent one of whatever the value of this box is.
+        @param: event -> the wx.COMBOBOXEVENT that triggered this function
         """
         self.parent.UPPER_LEVEL_SHOW=self.show_box.GetValue()
-        self.parent.calculate_higher_levels_data()
-        self.parent.update_selection()
+        self.parent.calculate_high_levels_data()
+        self.parent.plot_high_levels_data()
 
 
-    def on_select_higher_level(self,event,called_by_parent=False):
+    def on_select_high_level(self,event,called_by_parent=False):
         """
         alters the possible entries in level_names combobox to give the user selections for which specimen interpretations to display in the logger
         @param: event -> the wx.COMBOBOXEVENT that triggered this function
@@ -516,7 +699,7 @@ class InterpretationEditorFrame(wx.Frame):
 
         if not called_by_parent:
             self.parent.level_box.SetStringSelection(UPPER_LEVEL)
-            self.parent.onSelect_higher_level(event,True)
+            self.parent.onSelect_high_level(event,True)
 
         self.on_select_level_name(event)
 
@@ -550,7 +733,7 @@ class InterpretationEditorFrame(wx.Frame):
         """
         new_mean_type = self.mean_type_box.GetValue()
         if new_mean_type == "None":
-            self.parent.clear_higher_level_pars()
+            self.parent.clear_high_level_pars()
         self.parent.mean_type_box.SetStringSelection(new_mean_type)
         self.parent.onSelect_mean_type_box(event)
 
@@ -571,7 +754,7 @@ class InterpretationEditorFrame(wx.Frame):
         """
         i = self.switch_stats_button.GetValue()
         self.parent.switch_stats_button.SetValue(i)
-        self.parent.update_higher_level_stats()
+        self.parent.update_high_level_stats()
 
     def add_highlighted_fits(self, evnet):
         """
@@ -582,14 +765,13 @@ class InterpretationEditorFrame(wx.Frame):
         specimens = []
         next_i = self.logger.GetNextSelected(-1)
         if next_i == -1: return
-        else:
-            while next_i != -1:
-                fit,specimen = self.fit_list[next_i]
-                if specimen in specimens:
-                    next_i = self.logger.GetNextSelected(next_i)
-                    continue
-                else: specimens.append(specimen)
+        while next_i != -1:
+            fit,specimen = self.fit_list[next_i]
+            if specimen in specimens:
                 next_i = self.logger.GetNextSelected(next_i)
+                continue
+            else: specimens.append(specimen)
+            next_i = self.logger.GetNextSelected(next_i)
 
         for specimen in specimens:
             self.add_fit_to_specimen(specimen)
@@ -629,10 +811,7 @@ class InterpretationEditorFrame(wx.Frame):
             print('-E- interpretation called ' + new_name + ' already exsists for specimen ' + specimen)
             return
 
-        new_fit = Fit(new_name, new_tmax, new_tmin, new_color, self.parent)
-        new_fit.put(specimen,self.parent.COORDINATE_SYSTEM,self.parent.get_PCA_parameters(specimen,new_fit,new_tmin,new_tmax,self.parent.COORDINATE_SYSTEM,"DE-BFL"))
-
-        self.parent.pmag_results_data['specimens'][specimen].append(new_fit)
+        self.parent.add_fit(specimen, new_name, new_tmin, new_tmax, color=new_color)
 
     def delete_highlighted_fits(self, event):
         """
@@ -730,15 +909,15 @@ class InterpretationEditorFrame(wx.Frame):
     def scatter(self,*args,**kwargs):
 #        args_corrected = self.eqarea.transAxes.transform(vstack(args).T)
 #        x,y = args_corrected.T
-        self.eqarea.scatter(*args,**kwargs)
+        return self.eqarea.scatter(*args,**kwargs)
 
     def plot(self,*args,**kwargs):
 #        args_corrected = self.eqarea.transAxes.transform(vstack(args).T)
 #        x,y = args_corrected.T
-        self.eqarea.plot(*args,**kwargs)
+        return self.eqarea.plot(*args,**kwargs)
 
     def write(self,text):
-        self.eqarea.text(-1.2,1.15,text,{'family':self.font_type, 'fontsize':10*self.GUI_RESOLUTION, 'style':'normal','va':'center', 'ha':'left' })
+        return self.eqarea.text(-1.2,1.15,text,{'family':self.font_type, 'fontsize':10*self.GUI_RESOLUTION, 'style':'normal','va':'center', 'ha':'left' })
 
     def draw_net(self):
         draw_net(self.eqarea)
@@ -751,46 +930,74 @@ class InterpretationEditorFrame(wx.Frame):
         self.eqarea.axis('off')
         self.canvas.draw()
 
-    def home_higher_equalarea(self,event):
+    def pan_zoom_high_equalarea(self,event):
         """
-        returns higher equal area to it's original position
+        Uses the toolbar for the canvas to change the function from zoom to pan or pan to zoom
+        @param: event -> the wx.MouseEvent that triggered this funciton
+        """
+        if event.LeftIsDown() or event.ButtonDClick():
+            return
+        elif self.high_EA_setting == "Zoom":
+            self.high_EA_setting = "Pan"
+            try: self.toolbar.pan('off')
+            except TypeError: pass
+        elif self.high_EA_setting == "Pan":
+            self.high_EA_setting = "Zoom"
+            try: self.toolbar.zoom()
+            except TypeError: pass
+        else:
+            self.high_EA_setting = "Zoom"
+            try: self.toolbar.zoom()
+            except TypeError: pass
+
+    def home_high_equalarea(self,event):
+        """
+        returns high equal area to it's original position
         @param: event -> the wx.MouseEvent that triggered the call of this function
         @alters: toolbar setting
         """
         self.toolbar.home()
 
-    def on_change_higher_mouse_cursor(self,event):
+    def on_change_high_mouse_cursor(self,event):
         """
         If mouse is over data point making it selectable change the shape of the cursor
         @param: event -> the wx Mouseevent for that click
         """
         if self.show_box.GetValue() != "specimens": return
-        if not self.parent.higher_EA_xdata or not self.parent.higher_EA_ydata: return
+        if not self.parent.high_EA_xdata or not self.parent.high_EA_ydata: return
         pos=event.GetPosition()
         width, height = self.canvas.get_width_height()
         pos[1] = height - pos[1]
         xpick_data,ypick_data = pos
-        xdata_org = self.parent.higher_EA_xdata
-        ydata_org = self.parent.higher_EA_ydata
+        xdata_org = self.parent.high_EA_xdata
+        ydata_org = self.parent.high_EA_ydata
         data_corrected = self.eqarea.transData.transform(vstack([xdata_org,ydata_org]).T)
         xdata,ydata = data_corrected.T
         xdata = map(float,xdata)
         ydata = map(float,ydata)
         e = 4e0
 
-        if self.higher_EA_setting == "Zoom":
+        if self.high_EA_setting == "Zoom":
             self.canvas.SetCursor(wx.StockCursor(wx.CURSOR_CROSS))
-        elif self.higher_EA_setting == "Pan":
-            self.canvas.SetCursor(wx.StockCursor(wx.CURSOR_WATCH))
         else:
             self.canvas.SetCursor(wx.StockCursor(wx.CURSOR_ARROW))
         for i,(x,y) in enumerate(zip(xdata,ydata)):
             if 0 < sqrt((x-xpick_data)**2. + (y-ypick_data)**2.) < e:
                 self.canvas.SetCursor(wx.StockCursor(wx.CURSOR_HAND))
                 break
+        event.Skip()
 
-    def on_equalarea_higher_select(self,event):
-        self.parent.on_equalarea_higher_select(event,fig = self.eqarea, canvas = self.canvas)
+    def on_equalarea_high_select(self,event):
+        self.parent.on_equalarea_high_select(event,fig = self.eqarea, canvas = self.canvas)
+
+    ###############################Menu Functions######################################
+
+    def on_menu_help(self,event):
+        """
+        Toggles the GUI's help mode which allows user to click on any part of the dialog and get help
+        @param: event -> wx.MenuEvent that triggers this function
+        """
+        self.helper.BeginContextHelp(None)
 
     ###############################Window Functions######################################
 

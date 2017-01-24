@@ -11,7 +11,7 @@ Essentials_Problem_Datafiles
 .#*
 *.log
 *.redo
-#*.ipynb       
+#*.ipynb
 .eggs*
 */*.png
 consistency_test/pmag_fixed_criteria.txt
@@ -21,6 +21,7 @@ extra_out_full_output.txt
 random_full_output.txt
 rename_me_full_output.txt
 data_files/*/*checkpoint.ipynb
+data_files/notebooks/*/*checkpoint.ipynb
 demag_orient.txt
 pmagpy/*.png
 
@@ -183,4 +184,11 @@ pmagpy_cli.egg-info/requires.txt
 3_0/McMurdo2.5/*
 Location_*/
 Location_*/*
+<<<<<<< HEAD
+>>>>>>> PmagPy/master
+=======
+
+*.bak
+*/*.bak
+*new_*.txt
 >>>>>>> PmagPy/master

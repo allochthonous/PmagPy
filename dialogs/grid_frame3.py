@@ -4,10 +4,10 @@ GridBuilder -- data methods for GridFrame (add data to frame, save it, etc.)
 """
 import wx
 import drop_down_menus3 as drop_down_menus
+import pandas as pd
 import pmag_widgets as pw
 import magic_grid3 as magic_grid
-import pmagpy.builder as builder
-from pmagpy.controlled_vocabularies3 import vocab
+#from pmagpy.controlled_vocabularies3 import vocab
 import pmagpy.new_builder as nb
 
 
@@ -16,24 +16,27 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
     make_magic
     """
     def __init__(self, contribution, WD=None, frame_name="grid frame",
-                 panel_name="grid panel", parent=None):
+                 panel_name="grid panel", parent=None, exclude_cols=()):
         self.parent = parent
         wx.GetDisplaySize()
         title = 'Edit {} data'.format(panel_name)
-        super(GridFrame, self).__init__(parent=parent, id=wx.ID_ANY, name=frame_name, title=title)
+        super(GridFrame, self).__init__(parent=parent, id=wx.ID_ANY,
+                                        name=frame_name, title=title)
         # if controlled vocabularies haven't already been grabbed from earthref
         # do so now
-        if not any(vocab.vocabularies):
-            vocab.get_all_vocabulary()
+        #if not any(vocab.vocabularies):
+        #    vocab.get_all_vocabulary()
 
         self.remove_cols_mode = False
         self.deleteRowButton = None
         self.selected_rows = set()
 
         self.contribution = contribution
+        self.df_slice = None
+        self.exclude_cols = exclude_cols
 
         self.panel = wx.Panel(self, name=panel_name, size=wx.GetDisplaySize())
-        self.grid_type = panel_name
+        self.grid_type = str(panel_name)
         dm = self.contribution.data_model.dm[self.grid_type]
         dm['str_validations'] = dm['validations'].str.join(", ")
         # these are the headers that are required no matter what for this datatype
@@ -78,7 +81,8 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
             dataframe = None
         self.grid_builder = GridBuilder(self.contribution, self.grid_type,
                                         self.panel, parent_type=self.parent_type,
-                                        reqd_headers=self.reqd_headers)
+                                        reqd_headers=self.reqd_headers,
+                                        exclude_cols=self.exclude_cols)
 
         self.grid = self.grid_builder.make_grid()
         self.grid.InitUI()
@@ -123,6 +127,21 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
                                       name='cancel_btn')
         self.Bind(wx.EVT_BUTTON, self.onCancelButton, self.cancelButton)
 
+        ## Input/output buttons
+        self.copyButton = wx.Button(self.panel, id=-1,
+                                     label="Start copy mode",
+                                     name="copy_mode_btn")
+        self.Bind(wx.EVT_BUTTON, self.onCopyMode, self.copyButton)
+        self.selectAllButton = wx.Button(self.panel, id=-1,
+                                         label="Copy all cells",
+                                         name="select_all_btn")
+        self.Bind(wx.EVT_BUTTON, self.onSelectAll, self.selectAllButton)
+        self.copySelectionButton = wx.Button(self.panel, id=-1,
+                                         label="Copy selected cells",
+                                         name="copy_selection_btn")
+        self.Bind(wx.EVT_BUTTON, self.onCopySelection, self.copySelectionButton)
+        self.copySelectionButton.Disable()
+
         ## Help message and button
         # button
         self.toggle_help_btn = wx.Button(self.panel, id=-1, label="Show help",
@@ -130,7 +149,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
         self.Bind(wx.EVT_BUTTON, self.toggle_help, self.toggle_help_btn)
         # message
         self.help_msg_boxsizer = wx.StaticBoxSizer(wx.StaticBox(self.panel, -1, name='help_msg_boxsizer'), wx.VERTICAL)
-        self.default_msg_text = 'Edit {} here.\nYou can add or remove both rows and columns, however required columns may not be deleted.\nControlled vocabularies are indicated by **, and will have drop-down-menus.\nTo edit all values in a column, click the column header.\nYou can cut and paste a block of cells from an Excel-like file.\nJust click the top left cell and use command "v".'.format(self.grid_type)
+        self.default_msg_text = 'Edit {} here.\nYou can add or remove both rows and columns, however required columns may not be deleted.\nControlled vocabularies are indicated by **, and will have drop-down-menus.\nSuggested vocabularies are indicated by ^^, and also have drop-down-menus.\nTo edit all values in a column, click the column header.\nYou can cut and paste a block of cells from an Excel-like file.\nJust click the top left cell and use command "v".'.format(self.grid_type)
         txt = ''
         if self.grid_type == 'locations':
             txt = '\n\nNote: you can fill in location start/end latitude/longitude here.\nHowever, if you add sites in step 2, the program will calculate those values automatically,\nbased on site latitudes/logitudes.\nThese values will be written to your upload file.'
@@ -153,7 +172,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
                                           name='toggle_codes_btn')
         self.Bind(wx.EVT_BUTTON, self.toggle_codes, self.toggle_codes_btn)
         # message
-        self.code_msg_boxsizer = pw.MethodCodeDemystifier(self.panel, vocab)
+        self.code_msg_boxsizer = pw.MethodCodeDemystifier(self.panel, self.contribution.vocab)
         self.code_msg_boxsizer.ShowItems(False)
 
         ## Add content to sizers
@@ -164,24 +183,33 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
                                                       name='manage rows'), wx.VERTICAL)
         main_btn_vbox = wx.StaticBoxSizer(wx.StaticBox(self.panel, -1, label='Manage data',
                                                        name='manage data'), wx.VERTICAL)
-        col_btn_vbox.Add(self.add_cols_button, flag=wx.ALL, border=5)
-        col_btn_vbox.Add(self.remove_cols_button, flag=wx.ALL, border=5)
-        row_btn_vbox.Add(many_rows_box, flag=wx.ALL, border=5)
-        row_btn_vbox.Add(self.remove_row_button, flag=wx.ALL, border=5)
-        row_btn_vbox.Add(self.deleteRowButton, flag=wx.ALL, border=5)
-        main_btn_vbox.Add(self.importButton, flag=wx.ALL, border=5)
-        main_btn_vbox.Add(self.exitButton, flag=wx.ALL, border=5)
-        main_btn_vbox.Add(self.cancelButton, flag=wx.ALL, border=5)
-        self.hbox.Add(col_btn_vbox)
-        self.hbox.Add(row_btn_vbox)
-        self.hbox.Add(main_btn_vbox)
+        input_output_vbox = wx.StaticBoxSizer(wx.StaticBox(self.panel, -1, label='In/Out',
+                                                           name='manage in out'), wx.VERTICAL)
+        col_btn_vbox.Add(self.add_cols_button, 1, flag=wx.ALL, border=5)
+        col_btn_vbox.Add(self.remove_cols_button, 1, flag=wx.ALL, border=5)
+        row_btn_vbox.Add(many_rows_box, 1, flag=wx.ALL, border=5)
+        row_btn_vbox.Add(self.remove_row_button, 1, flag=wx.ALL, border=5)
+        row_btn_vbox.Add(self.deleteRowButton, 1, flag=wx.ALL, border=5)
+        main_btn_vbox.Add(self.importButton, 1, flag=wx.ALL, border=5)
+        main_btn_vbox.Add(self.exitButton, 1, flag=wx.ALL, border=5)
+        main_btn_vbox.Add(self.cancelButton, 1, flag=wx.ALL, border=5)
+        input_output_vbox.Add(self.copyButton, 1, flag=wx.ALL, border=5)
+        input_output_vbox.Add(self.selectAllButton, 1, flag=wx.ALL, border=5)
+        input_output_vbox.Add(self.copySelectionButton, 1, flag=wx.ALL, border=5)
+        self.hbox.Add(col_btn_vbox, 1)
+        self.hbox.Add(row_btn_vbox, 1)
+        self.hbox.Add(main_btn_vbox, 1)
+        self.hbox.Add(input_output_vbox, 1)
 
-        self.panel.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.onLeftClickLabel, self.grid)
+        #self.panel.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.onLeftClickLabel, self.grid)
+        self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.onLeftClickLabel, self.grid)
+        #
         self.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
         self.panel.Bind(wx.EVT_TEXT_PASTE, self.do_fit)
-
         # add actual data!
         self.grid_builder.add_data_to_grid(self.grid, self.grid_type)
+        # set scrollbars
+        self.grid.set_scrollbars()
 
         ## this would be a way to prevent editing
         ## some cells in age grid.
@@ -194,7 +222,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
 
         self.drop_down_menu = drop_down_menus.Menus(self.grid_type, self.contribution, self.grid)
         self.grid_box = wx.StaticBoxSizer(wx.StaticBox(self.panel, -1, name='grid container'), wx.VERTICAL)
-        self.grid_box.Add(self.grid, flag=wx.ALL, border=5)
+        self.grid_box.Add(self.grid, 1, flag=wx.ALL|wx.EXPAND, border=5)
 
         # a few special touches if it is a location grid
         # **** make these work again (esp. min/max lat/lon)
@@ -226,22 +254,26 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
         ## none of these anymore
 
         # final layout, set size
-        self.main_sizer.Add(self.hbox, flag=wx.ALL, border=20)
-        self.main_sizer.Add(self.toggle_help_btn,
-                            flag=wx.BOTTOM|wx.ALIGN_CENTRE,
+        self.main_sizer.Add(self.hbox, flag=wx.ALL|wx.ALIGN_CENTER|wx.SHAPED , border=20)
+        self.main_sizer.Add(self.toggle_help_btn, .5,
+                            flag=wx.BOTTOM|wx.ALIGN_CENTRE|wx.SHAPED,
                             border=5)
-        self.main_sizer.Add(self.help_msg_boxsizer,
-                            flag=wx.BOTTOM|wx.ALIGN_CENTRE,
+        self.main_sizer.Add(self.help_msg_boxsizer, .5,
+                            flag=wx.BOTTOM|wx.ALIGN_CENTRE|wx.SHAPED,
                             border=10)
-        self.main_sizer.Add(self.toggle_codes_btn,
-                            flag=wx.BOTTOM|wx.ALIGN_CENTRE,
+        self.main_sizer.Add(self.toggle_codes_btn, .5,
+                            flag=wx.BOTTOM|wx.ALIGN_CENTRE|wx.SHAPED,
                             border=5)
-        self.main_sizer.Add(self.code_msg_boxsizer,
-                            flag=wx.BOTTOM|wx.ALIGN_CENTRE,
+        self.main_sizer.Add(self.code_msg_boxsizer, .5,
+                            flag=wx.BOTTOM|wx.ALIGN_CENTRE|wx.SHAPED,
                             border=5)
-        self.main_sizer.Add(self.grid_box, flag=wx.ALL, border=10)
+        self.main_sizer.Add(self.grid_box, 2, flag=wx.ALL|wx.ALIGN_CENTER|wx.EXPAND, border=10)
         self.panel.SetSizer(self.main_sizer)
-        self.main_sizer.Fit(self)
+#        self.main_sizer.Fit(self)
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_sizer.Add(self.panel, 1, wx.EXPAND)
+        self.SetSizer(panel_sizer)
+        panel_sizer.Fit(self)
         ## this keeps sizing correct if the user resizes the window manually
         #self.Bind(wx.EVT_SIZE, self.do_fit)
         self.Centre()
@@ -307,6 +339,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
             btn.SetLabel('Show method codes')
         self.do_fit(None)
 
+    # this function is deprecated
     def toggle_ages(self, event):
         """
         Switch the type of grid between site/sample
@@ -325,7 +358,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
         self.parent.Parent.Hide()
         self.grid = self.grid_builder.make_grid()
         self.grid.InitUI()
-        self.panel.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.onLeftClickLabel, self.grid)
+        self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.onLeftClickLabel, self.grid)
         self.grid_builder.add_data_to_grid(self.grid, self.grid_type)
         self.grid_builder.add_age_data_to_grid()
         self.drop_down_menu = drop_down_menus.Menus(self.grid_type, self, self.grid, None)
@@ -358,6 +391,8 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
         label = self.grid.GetColLabelValue(col)
         if '**' in label:
             label = label.strip('**')
+        elif '^^' in label:
+            label = label.strip('^^')
         if label in self.reqd_headers:
             pw.simple_warning("That header is required, and cannot be removed")
             return False
@@ -428,7 +463,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
                     col_number = self.grid.add_col(col)
                     # add to appropriate headers list
                     # add drop down menus for user-added column
-                    if col in vocab.possible_vocabularies:
+                    if col in self.contribution.vocab.vocabularies:
                         self.drop_down_menu.add_drop_down(col_number, col)
                     if col == "method_codes":
                         self.drop_down_menu.add_method_drop_down(col_number, col)
@@ -449,7 +484,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
                     col_number = self.grid.add_col(name)
                     # add to appropriate headers list
                     # add drop down menus for user-added column
-                    if name in vocab.possible_vocabularies:
+                    if name in self.contribution.vocab.vocabularies:
                         self.drop_down_menu.add_drop_down(col_number, name)
                     if name == "method_codes":
                         self.drop_down_menu.add_method_drop_down(col_number, name)
@@ -553,7 +588,7 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
             btn.Enable()
 
         # unbind grid click for deletion
-        self.Unbind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK)
+        self.grid.Unbind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK)
         # undo visual cues
         self.grid.SetWindowStyle(wx.DEFAULT)
         self.grid_box.GetStaticBox().SetWindowStyle(wx.DEFAULT)
@@ -612,62 +647,75 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
     ## Meta buttons -- cancel & save functions
 
     def onImport(self, event):
-        print "this functionality has not been converted to 3.0"
-        return
         """
+        Import a MagIC-format file
+        """
+        if self.grid.changes:
+            print "-W- Your changes will be overwritten..."
+            wind = pw.ChooseOne(self, "Import file anyway", "Save grid first",
+                                "-W- Your grid has unsaved changes which will be overwritten if you import a file now...")
+            wind.Centre()
+            res = wind.ShowModal()
+            # save grid first:
+            if res == wx.ID_NO:
+                self.onSave(None, alert=True, destroy=False)
+                # reset self.changes
+                self.grid.changes = set()
+
         openFileDialog = wx.FileDialog(self, "Open MagIC-format file", self.WD, "",
                                        "MagIC file|*.*", wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
         result = openFileDialog.ShowModal()
-
         if result == wx.ID_OK:
-            if self.grid_type == 'age':
-                import_type = 'age'
-                parent_type = None
-                filename = openFileDialog.GetPath()
+            # get filename
+            filename = openFileDialog.GetPath()
+            # make sure the dtype is correct
+            f = open(filename)
+            line = f.readline()
+            if line.startswith("tab"):
+                delim, dtype = line.split("\t")
             else:
-                parent_ind = self.er_magic.ancestry.index(self.grid_type)
-                parent_type = self.er_magic.ancestry[parent_ind+1]
-
-                # get filename and file data
-                filename = openFileDialog.GetPath()
-                import_type = self.er_magic.get_magic_info(self.grid_type, parent_type,
-                                                           filename=filename, sort_by_file_type=True)
-            # add any additional headers to the grid, while preserving all old headers
-            current_headers = self.grid_headers[self.grid_type]['er'][0]
-            self.er_magic.init_actual_headers()
-            er_headers = list(set(self.er_magic.headers[self.grid_type]['er'][0]).union(current_headers))
-            self.er_magic.headers[self.grid_type]['er'][0] = er_headers
-
-            include_pmag = False
-            if 'pmag' in filename and import_type == self.grid_type:
-                include_pmag = True
-            elif 'pmag' in filename and import_type != self.grid_type:
-                self.er_magic.incl_pmag_data.add(import_type)
-            #
-            if include_pmag:
-                pmag_headers = self.er_magic.headers[self.grid_type]['pmag'][0]
-                headers = set(er_headers).union(pmag_headers)
+                delim, dtype = line.split("")
+            f.close()
+            dtype = dtype.strip()
+            if (dtype != self.grid_type) and (dtype + "s" != self.grid_type):
+                text = "You are currently editing the {} grid, but you are trying to import a {} file.\nPlease open the {} grid and then re-try this import.".format(self.grid_type, dtype, dtype)
+                pw.simple_warning(text)
+                return
+            # grab old data for concatenation
+            if self.grid_type in self.contribution.tables:
+                old_df_container = self.contribution.tables[self.grid_type]
             else:
-                headers = er_headers
-            for head in sorted(list(headers)):
-                if head not in self.grid.col_labels:
-                    col_num = self.grid.add_col(head)
-                    if head in vocab.possible_vocabularies:
-                        self.drop_down_menu.add_drop_down(col_num, head)
-            # add age data
-            if import_type == 'age' and self.grid_type == 'age':
-                self.grid_builder.add_age_data_to_grid()
-                self.grid.size_grid()
-                self.main_sizer.Fit(self)
-            elif import_type == self.grid_type:
-                self.grid_builder.add_data_to_grid(self.grid, import_type)
-                self.grid.size_grid()
-                self.main_sizer.Fit(self)
-            # if imported data will not show up in current grid,
-            # warn user
-            else:
-                pw.simple_warning('You have imported a {} type file.\nYou\'ll need to open up your {} grid to see the added data'.format(import_type, import_type))
-        """
+                old_df_container = None
+            old_col_names = self.grid.col_labels
+            # read in new file and update contribution
+            df_container = nb.MagicDataFrame(filename, dmodel=self.dm,
+                                             columns=old_col_names)
+            # concatenate if possible
+            if not isinstance(old_df_container, type(None)):
+                df_container.df = pd.concat([old_df_container.df, df_container.df],
+                                            axis=0)
+            self.contribution.tables[df_container.dtype] = df_container
+            self.grid_builder = GridBuilder(self.contribution, self.grid_type,
+                                            self.panel, parent_type=self.parent_type,
+                                            reqd_headers=self.reqd_headers)
+            # delete old grid
+            self.grid_box.Hide(0)
+            self.grid_box.Remove(0)
+            # create new, updated grid
+            self.grid = self.grid_builder.make_grid()
+            self.grid.InitUI()
+            # add data to new grid
+            self.grid_builder.add_data_to_grid(self.grid, self.grid_type)
+            # add new grid to sizer and fit everything
+            self.grid_box.Add(self.grid, flag=wx.ALL, border=5)
+            self.main_sizer.Fit(self)
+            self.Centre()
+            # add any needed drop-down-menus
+            self.drop_down_menu = drop_down_menus.Menus(self.grid_type,
+                                                        self.contribution,
+                                                        self.grid)
+            # done!
+        return
 
     def onCancelButton(self, event):
         if self.grid.changes:
@@ -679,18 +727,158 @@ class GridFrame(wx.Frame):  # class GridFrame(wx.ScrolledWindow):
         else:
             self.Destroy()
 
-    def onSave(self, event):#, age_data_type='site'):
+    def onSave(self, event, alert=False, destroy=True):
         # tidy up drop_down menu
         if self.drop_down_menu:
             self.drop_down_menu.clean_up()
         # then save actual data
         self.grid_builder.save_grid_data()
-        if not event:
+        if not event and not alert:
             return
         # then alert user
         wx.MessageBox('Saved!', 'Info',
                       style=wx.OK | wx.ICON_INFORMATION)
-        self.Destroy()
+        if destroy:
+            self.Destroy()
+
+    ### Custom copy/paste functionality
+
+    def onCopyMode(self, event):
+        # first save all grid data
+        self.grid_builder.save_grid_data()
+        self.drop_down_menu.clean_up()
+        # enable and un-grey the exit copy mode button
+        self.copyButton.SetLabel('End copy mode')
+        self.Bind(wx.EVT_BUTTON, self.onEndCopyMode, self.copyButton)
+        # disable and grey out other buttons
+        btn_list = [self.add_cols_button, self.remove_cols_button,
+                    self.remove_row_button, self.add_many_rows_button,
+                    self.importButton, self.cancelButton, self.exitButton]
+        for btn in btn_list:
+            btn.Disable()
+        self.copySelectionButton.Enable()
+        # next, undo useless bindings (mostly for drop-down-menus)
+        # this one works:
+        self.drop_down_menu.EndUI()
+        # these ones don't work: (it doesn't matter which one you bind to)
+        #self.grid.Unbind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK)
+        #self.Unbind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK)
+        #self.panel.Unbind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK)
+        # this works hack-like:
+        self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.do_nothing)
+        # this one is irrelevant (it just deals with resizing)
+        #self.Unbind(wx.EVT_KEY_DOWN)
+        #
+        # make grid uneditable
+        self.grid.EnableEditing(False)
+        self.Refresh()
+        # change and show help message
+        copy_text = """You are now in 'copy' mode.  To return to 'editing' mode, click 'End copy mode'.
+To copy the entire grid, click the 'Copy all cells' button.
+To copy a selection of the grid, you must first make a selection by either clicking and dragging, or using Shift click.
+Once you have your selection, click the 'Copy selected cells' button, or hit 'Ctrl c'.
+You may then paste into a text document or spreadsheet!
+"""
+        self.toggle_help_btn.SetLabel('Hide help')
+        self.msg_text.SetLabel(copy_text)
+        self.help_msg_boxsizer.Fit(self.help_msg_boxsizer.GetStaticBox())
+        self.main_sizer.Fit(self)
+        self.help_msg_boxsizer.ShowItems(True)
+        self.do_fit(None)
+        # then bind for selecting cells in multiple columns
+        self.grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self.onDragSelection)
+        # bind Cmd c for copy
+        self.grid.Bind(wx.EVT_KEY_DOWN, self.onKey)
+        # done!
+
+    def onDragSelection(self, event):
+        """
+        Set self.df_slice based on user's selection
+        """
+        if self.grid.GetSelectionBlockTopLeft():
+            top_left = self.grid.GetSelectionBlockTopLeft()[0]
+            bottom_right = self.grid.GetSelectionBlockBottomRight()[0]
+        else:
+            return
+        # GetSelectionBlock returns (row, col)
+        min_col = top_left[1]
+        max_col = bottom_right[1]
+        min_row = top_left[0]
+        max_row = bottom_right[0]
+        self.df_slice = self.contribution.tables[self.grid_type].df.iloc[min_row:max_row+1, min_col:max_col+1]
+
+
+    def do_nothing(self, event):
+        """
+        Dummy method to prevent default header-click behavior
+        while in copy mode
+        """
+        pass
+
+    def onKey(self, event):
+        """
+        Copy selection if control down and 'c'
+        """
+        if event.CmdDown() or event.ControlDown():
+            if event.GetKeyCode() == 67:
+                self.onCopySelection(None)
+
+    def onSelectAll(self, event):
+        """
+        Selects full grid and copies it to the Clipboard
+        """
+        # do clean up here!!!
+        if self.drop_down_menu:
+            self.drop_down_menu.clean_up()
+        # save all grid data
+        self.grid_builder.save_grid_data()
+        df = self.contribution.tables[self.grid_type].df
+        # write df to clipboard for pasting
+        # header arg determines whether columns are taken
+        # index arg determines whether index is taken
+        pd.DataFrame.to_clipboard(df, header=False, index=False)
+        print '-I- You have copied all cells! You may paste them into a text document or spreadsheet using Command v.'
+        # done!
+
+    def onCopySelection(self, event):
+        """
+        Copies self.df_slice to the Clipboard if slice exists
+        """
+        if self.df_slice is not None:
+            pd.DataFrame.to_clipboard(self.df_slice, header=False, index=False)
+            self.grid.ClearSelection()
+            self.df_slice = None
+            print '-I- You have copied the selected cells.  You may paste them into a text document or spreadsheet using Command v.'
+        else:
+            print '-W- No cells were copied! You must highlight a selection cells before hitting the copy button.  You can do this by clicking and dragging, or by using the Shift key and click.'
+
+    def onEndCopyMode(self, event):
+        # enable/disable buttons as needed
+        btn_list = [self.add_cols_button, self.remove_cols_button,
+                    self.remove_row_button, self.add_many_rows_button,
+                    self.importButton, self.cancelButton, self.exitButton]
+        for btn in btn_list:
+            btn.Enable()
+        self.copySelectionButton.Disable()
+        self.copyButton.SetLabel('Start copy mode')
+        self.Bind(wx.EVT_BUTTON, self.onCopyMode, self.copyButton)
+        # get rid of special help message
+        self.toggle_help_btn.SetLabel('Show help')
+        self.msg_text.SetLabel(self.default_msg_text)
+        self.help_msg_boxsizer.Fit(self.help_msg_boxsizer.GetStaticBox())
+        self.main_sizer.Fit(self)
+        self.help_msg_boxsizer.ShowItems(False)
+        self.do_fit(None)
+
+        # re-init normal grid UI
+        self.drop_down_menu.InitUI()
+        self.grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.onLeftClickLabel, self.grid)
+        self.grid.EnableEditing(True)
+        # deselect any cells selected during copy mode
+        self.grid.ClearSelection()
+        self.df_slice = None
+        # get rid of special copy binding
+        self.grid.Unbind(wx.EVT_KEY_DOWN)#, self.onKey)
 
 
 class GridBuilder(object):
@@ -699,8 +887,10 @@ class GridBuilder(object):
     """
 
     def __init__(self, contribution, grid_type, panel,
-                 parent_type=None, reqd_headers=None):
+                 parent_type=None, reqd_headers=None,
+                 exclude_cols=()):
         self.contribution = contribution
+        self.exclude_cols = exclude_cols
         if grid_type in contribution.tables:
             self.magic_dataframe = contribution.tables[grid_type]
         else:
@@ -717,9 +907,10 @@ class GridBuilder(object):
         """
         return grid
         """
-        if isinstance(self.magic_dataframe, nb.MagicDataFrame) and len(self.magic_dataframe.df):
+        # if there is a MagicDataFrame, extract data from it
+        if isinstance(self.magic_dataframe, nb.MagicDataFrame):
             # get columns and reorder slightly
-            col_labels = list(self.magic_dataframe.df.columns)
+            col_labels = list(self.magic_dataframe.df.columns.difference(self.exclude_cols))
             if self.grid_type == 'ages':
                 levels = ['specimen', 'sample', 'site', 'location']
                 for label in levels[:]:
@@ -730,13 +921,23 @@ class GridBuilder(object):
                 col_labels[:0] = levels
             else:
                 if self.parent_type:
-                    col_labels.remove(self.parent_type[:-1])
+                    if self.parent_type[:-1] in col_labels:
+                        col_labels.remove(self.parent_type[:-1])
                     col_labels[:0] = [self.parent_type[:-1]]
-                col_labels.remove(self.magic_dataframe.df.index.name)
-                col_labels[:0] = [self.magic_dataframe.df.index.name]
+                if self.grid_type[:-1] in col_labels:
+                    col_labels.remove(self.grid_type[:-1])
+                col_labels[:0] = (self.grid_type[:-1],)
+            for col in col_labels:
+                if col not in self.magic_dataframe.df.columns:
+                    self.magic_dataframe.df[col] = None
             self.magic_dataframe.df = self.magic_dataframe.df[col_labels]
             row_labels = self.magic_dataframe.df.index
-        # if there is no pre-existing data, do some defaults:
+            # make sure minimum defaults are present
+            for header in self.reqd_headers:
+                if header not in col_labels:
+                    col_labels.append(header)
+        # if there is no pre-existing MagicDataFrame,
+        # make a blank grid with do some defaults:
         else:
             # default headers
             #col_labels = list(self.data_model.get_headers(self.grid_type, 'Names'))
@@ -744,7 +945,8 @@ class GridBuilder(object):
             col_labels = list(self.reqd_headers)
             if self.grid_type in ['specimens', 'samples', 'sites']:
                 col_labels.extend(['age', 'age_sigma'])
-            col_labels = sorted(set(col_labels))
+            ## use the following line if you want sorted column labels:
+            #col_labels = sorted(set(col_labels))
             # defaults are different for ages
             if self.grid_type == 'ages':
                 levels = ['specimen', 'sample', 'site', 'location']
@@ -765,9 +967,9 @@ class GridBuilder(object):
         self.grid = grid
         return grid
 
-    def add_data_to_grid(self, grid, grid_type=None, incl_pmag=True):
+    def add_data_to_grid(self, grid, grid_type=None):
         if isinstance(self.magic_dataframe, nb.MagicDataFrame):
-            grid.add_items(self.magic_dataframe.df)
+            grid.add_items(self.magic_dataframe.df, self.exclude_cols)
         grid.size_grid()
 
         # always start with at least one row:
@@ -777,6 +979,8 @@ class GridBuilder(object):
         else:
             if not grid.GetCellValue(0, 0) and grid.GetNumberRows() > 1:
                 grid.remove_row(0)
+        # include horizontal scrollbar unless grid has less than 5 rows
+        grid.set_scrollbars()
 
 
     def save_grid_data(self):
@@ -797,14 +1001,15 @@ class GridBuilder(object):
                 data = new_data[key]
                 # update the row if it exists already,
                 # otherwise create a new row
-                try:
-                    self.magic_dataframe.update_row(key, data)
-                except IndexError:
+
+                updated = self.magic_dataframe.update_row(key, data)
+                if not isinstance(updated, pd.DataFrame):
                     if self.grid_type == 'ages':
                         label = key
                     else:
                         label = self.grid_type[:-1]
-                    self.magic_dataframe.add_row(label, data)
+                    self.magic_dataframe.add_row(label, data,
+                                                 self.grid.col_labels)
             # update the contribution with the new dataframe
             self.contribution.tables[self.grid_type] = self.magic_dataframe
             # *** probably don't actually want to write to file, here (but maybe)

@@ -6,7 +6,7 @@ this module will provide all the functionality for the drop-down controlled voca
 # pylint: disable=W0612,C0111,C0301
 
 import wx
-from pmagpy.controlled_vocabularies3 import vocab
+from pmagpy.controlled_vocabularies3 import Vocabulary
 
 
 class Menus(object):
@@ -21,8 +21,8 @@ class Menus(object):
         # if controlled vocabularies haven't already been grabbed from earthref
         # do so now
         self.contribution = contribution
-        if not any(vocab.vocabularies):
-            vocab.get_all_vocabulary()
+        #if not any(vocab.vocabularies):
+        #    vocab.get_all_vocabulary()
 
         self.data_type = data_type
         if self.data_type in self.contribution.tables:
@@ -31,6 +31,8 @@ class Menus(object):
             self.magic_dataframe = None
         if self.data_type == 'ages':
             parent_ind, parent_table, self.parent_type = None, None, None
+        elif self.data_type == 'orient':
+            pass
         else:
             parent_ind = self.contribution.ancestry.index(self.data_type)
             parent_table, self.parent_type = self.contribution.get_table_name(parent_ind+1)
@@ -47,13 +49,14 @@ class Menus(object):
                                     'sites', 'locations', 'method_codes']
         self.InitUI()
 
+
     def InitUI(self):
         if self.data_type in ['orient', 'ages']:
             belongs_to = []
         else:
             parent_table_name = self.parent_type + "s"
             if parent_table_name in self.contribution.tables:
-                belongs_to = sorted(self.contribution.tables[parent_table_name].df[self.parent_type].unique())
+                belongs_to = sorted(self.contribution.tables[parent_table_name].df.index.unique())
             else:
                 belongs_to = []
 
@@ -70,10 +73,15 @@ class Menus(object):
                         level_names = list(self.contribution.tables[level+"s"].df.index.unique())
                     num = self.grid.col_labels.index(level)
                     self.choices[num] = (level_names, False)
-        self.window.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK,
-                         lambda event: self.on_left_click(event, self.grid, self.choices),
-                         self.grid)
-        #
+        # Bind left click to drop-down menu popping out
+        # replacing this:
+        #self.window.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK,
+        #lambda event: self.on_left_click(event, self.grid, self.choices),
+        #                 self.grid)
+        # with this:
+        self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK,
+                       lambda event: self.on_left_click(event, self.grid, self.choices))
+
         cols = self.grid.GetNumberCols()
         col_labels = [self.grid.GetColLabelValue(col) for col in range(cols)]
 
@@ -82,57 +90,78 @@ class Menus(object):
         for col_number, label in enumerate(col_labels):
             self.add_drop_down(col_number, label)
 
+    def EndUI(self):
+        """
+        prevent drop-down menu from popping up
+        """
+        self.grid.Unbind(wx.grid.EVT_GRID_CELL_LEFT_CLICK)
+
+
     def add_drop_down(self, col_number, col_label):
         """
         Add a correctly formatted drop-down-menu for given col_label,
-        if required.
+        if required or suggested.
         Otherwise do nothing.
         """
+        if col_label.endswith('**') or col_label.endswith('^^'):
+            col_label = col_label[:-2]
         if col_label == 'method_codes':
             self.add_method_drop_down(col_number, col_label)
+        elif col_label == 'magic_method_codes':
+            self.add_method_drop_down(col_number, 'method_codes')
         elif col_label in ['specimens', 'samples', 'sites', 'locations']:
             if col_label in self.contribution.tables:
                 item_df = self.contribution.tables[col_label].df
                 item_names = item_df[col_label[:-1]].unique()
                 self.choices[col_number] = (sorted(item_names), False)
-        if col_label in vocab.vocabularies:
-            # if not already assigned above
-            if col_number not in self.choices.keys():
-                # mark it as using a controlled vocabulary
+
+        # add vocabularies
+        if col_label in self.contribution.vocab.suggested:
+            typ = 'suggested'
+        elif col_label in self.contribution.vocab.vocabularies:
+            typ = 'controlled'
+        else:
+            return
+
+        # add menu, if not already set
+        if col_number not in self.choices.keys():
+            if typ == 'suggested':
+                self.grid.SetColLabelValue(col_number, col_label + "^^")
+                controlled_vocabulary = self.contribution.vocab.suggested[col_label]
+            else:
                 self.grid.SetColLabelValue(col_number, col_label + "**")
-                #url = 'https://api.earthref.org/MagIC/vocabularies/{}.json'.format(col_label)
-                #controlled_vocabulary = pd.io.json.read_json(url)
-                controlled_vocabulary = vocab.vocabularies[col_label]
-                stripped_list = []
-                for item in controlled_vocabulary:
-                    try:
-                        stripped_list.append(str(item))
-                    except UnicodeEncodeError:
-                        # skips items with non ASCII characters
-                        pass
+                controlled_vocabulary = self.contribution.vocab.vocabularies[col_label]
+            #
+            stripped_list = []
+            for item in controlled_vocabulary:
+                try:
+                    stripped_list.append(str(item))
+                except UnicodeEncodeError:
+                    # skips items with non ASCII characters
+                    pass
 
-                if len(stripped_list) > 100:
-                # split out the list alphabetically, into a dict of lists {'A': ['alpha', 'artist'], 'B': ['beta', 'beggar']...}
-                    dictionary = {}
-                    for item in stripped_list:
-                        letter = item[0].upper()
-                        if letter not in dictionary.keys():
-                            dictionary[letter] = []
-                        dictionary[letter].append(item)
-                    stripped_list = dictionary
+            if len(stripped_list) > 100:
+            # split out the list alphabetically, into a dict of lists {'A': ['alpha', 'artist'], 'B': ['beta', 'beggar']...}
+                dictionary = {}
+                for item in stripped_list:
+                    letter = item[0].upper()
+                    if letter not in dictionary.keys():
+                        dictionary[letter] = []
+                    dictionary[letter].append(item)
+                stripped_list = dictionary
 
-                two_tiered = True if isinstance(stripped_list, dict) else False
-                self.choices[col_number] = (stripped_list, two_tiered)
-
+            two_tiered = True if isinstance(stripped_list, dict) else False
+            self.choices[col_number] = (stripped_list, two_tiered)
+        return
 
     def add_method_drop_down(self, col_number, col_label):
         """
         Add drop-down-menu options for magic_method_codes columns
         """
         if self.data_type == 'ages':
-            method_list = vocab.age_methods
+            method_list = self.contribution.vocab.age_methods
         else:
-            method_list = vocab.methods
+            method_list = self.contribution.vocab.methods
         self.choices[col_number] = (method_list, True)
 
     def on_label_click(self, event):
@@ -203,6 +232,7 @@ class Menus(object):
             self.grid.SetColLabelValue(self.selected_col, col_label_value)
             for row in range(self.grid.GetNumberRows()):
                 self.grid.SetCellBackgroundColour(row, self.selected_col, 'white')
+        self.selected_col = None
         self.grid.ForceRefresh()
 
     def on_left_click(self, event, grid, choices):
@@ -230,7 +260,7 @@ class Menus(object):
                     if cell_value == default_val:
                         self.grid.SetCellValue(row, 0, new_val)
                     else:
-                        break
+                        continue
             return
         color = self.grid.GetCellBackgroundColour(event.GetRow(), event.GetCol())
         # allow user to cherry-pick cells for editing.
@@ -344,7 +374,7 @@ class Menus(object):
         if str(label) == "CLEAR cell of all values":
             label = ""
 
-        col_label = grid.GetColLabelValue(col).strip('\nEDIT ALL').strip('**')
+        col_label = grid.GetColLabelValue(col).strip('\nEDIT ALL').strip('**').strip('^^')
         if col_label in self.colon_delimited_lst and label:
             if not label.lower() in cell_value.lower():
                 label += (":" + cell_value).rstrip(':')

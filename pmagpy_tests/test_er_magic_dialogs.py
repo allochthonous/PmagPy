@@ -4,15 +4,13 @@ import unittest
 import sys
 import os
 import wx
-
-import dialogs.magic_grid as magic_grid
+from dialogs import magic_grid2 as magic_grid
 
 #import wx.lib.inspection
 #import numpy as np
 #import ipmag
 
-WD = sys.prefix
-project_WD = os.path.join(WD, 'pmagpy_data_files', 'testing', 'my_project')
+WD = os.getcwd()
 
 class TestMagicGrid(unittest.TestCase):
     """
@@ -96,5 +94,3 @@ class TestMagicGrid(unittest.TestCase):
         self.grid.remove_row(3)
         correct_changes = {-1, 1, 2, 4}
         self.assertEqual(correct_changes, self.grid.changes)
-
-

@@ -9,7 +9,7 @@ import wx
 import wx.html
 import webbrowser
 # ******
-from pmagpy.controlled_vocabularies3 import vocab
+from pmagpy.controlled_vocabularies3 import Vocabulary
 #from pmagpy.controlled_vocabularies import vocab
 
 
@@ -783,23 +783,27 @@ class AddItem(wx.Frame):
             owner = str(self.owner_name.GetValue())
             self.onAdd(item, owner)
         else:
-            self.onAdd(item)
+            self.onAdd(item, None)
         self.Destroy()
 
 
 class MethodCodeDemystifier(wx.StaticBoxSizer):
 
     def __init__(self, parent, vocabulary=None):
+        """
+        Takes a wx Parent window, and optionally a Vocabulary object
+        """
         self.box = wx.StaticBox(parent, wx.ID_ANY, "")
         super(MethodCodeDemystifier, self).__init__(self.box, orient=wx.VERTICAL)
         grid_sizer = wx.GridSizer(0, 5, 3, 3)
         if vocabulary:
             vc = vocabulary
         else:
-            vc = vocab
+            vc = Vocabulary()
+            vc.get_all_vocabulary()
+        self.vc = vc
         if not any(vc.code_types):
-            vc.get_all_vocabulary() # with 3.0
-            #vc.get_stuff() # with 2.5
+            vc.get_all_vocabulary()
         types = vc.code_types.index
         types = vc.code_types['label']
         type_ind = vc.code_types.index
@@ -825,7 +829,7 @@ class MethodCodeDemystifier(wx.StaticBoxSizer):
         else:
             btn = event.EventObject
             code_name = btn.Name
-        meth_type = vocab.get_one_meth_type(code_name, vocab.all_codes)['definition']
+        meth_type = self.vc.get_one_meth_type(code_name, self.vc.all_codes)['definition']
         str_meths = [ind + " :  " + (meth_type[ind] or 'No description available') for ind in meth_type.index]
         res = '\n'.join(str_meths)
         self.descriptions.SetValue(res)

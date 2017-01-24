@@ -1,6 +1,6 @@
 #!/usr/bin/env pythonw
 
-# pylint: disable=W0612,C0111,C0103,W0201
+# pylint: disable=W0612,C0111,C0103,W0201,E402
 
 print "-I- Importing Pmag GUI dependencies"
 #from pmag_env import set_env
@@ -10,25 +10,25 @@ if not matplotlib.get_backend() == 'WXAgg':
     matplotlib.use('WXAgg')
 import wx
 import wx.lib.buttons as buttons
-#import thellier_gui_dialogs
 import os
 import sys
-#import datetime
-#import shutil
-import pmagpy.pmag as pmag
-import pmagpy.ipmag as ipmag
-import pmagpy.builder2 as builder
-import dialogs.pmag_basic_dialogs as pmag_basic_dialogs
-import dialogs.pmag_er_magic_dialogs as pmag_er_magic_dialogs
-import dialogs.pmag_gui_menu as pmag_gui_menu
-import dialogs.ErMagicBuilder as ErMagicBuilder
+from pmagpy import pmag
+from pmagpy import ipmag
+from pmagpy import builder2 as builder
+from pmagpy import new_builder as nb
+from dialogs import pmag_basic_dialogs
+from dialogs import pmag_er_magic_dialogs
+from dialogs import pmag_gui_menu3 as pmag_gui_menu
+from dialogs import ErMagicBuilder
+from dialogs import pmag_widgets as pw
+
 try:
     from programs import demag_gui
 except:
     pass
 from programs import thellier_gui
+#from programs import thellier_gui3
 
-# import check_updates
 
 class MagMainFrame(wx.Frame):
     """"""
@@ -40,10 +40,29 @@ class MagMainFrame(wx.Frame):
     if sys.platform in ['win32', 'win64']:
         title += "   Powered by Enthought Canopy"
 
-    def __init__(self, WD=None):
-
-        self.FIRST_RUN = True
+    def __init__(self, WD=None, DM=None, dmodel=None):
+        """
+        Input working directory, data model number (2.5 or 3),
+        and data model (optional).
+        """
         wx.Frame.__init__(self, None, wx.ID_ANY, self.title, name='pmag_gui mainframe')
+        # if DM was provided:
+        if DM:
+            self.data_model_num = int(DM)
+        # try to get DM from command line args
+        if not DM:
+            self.data_model_num = int(pmag.get_named_arg_from_sys("-DM", 0))
+            DM = self.data_model_num
+        # if you still don't have DM, make the user choose
+        if not DM:
+            from dialogs import demag_dialogs
+            ui_dialog = demag_dialogs.user_input(self,['data_model'],parse_funcs=[float], heading="Please input prefered data model (2.5,3.0).  Note: 2.5 is for legacy projects only, if you are have new data please use 3.0.", values=[3])
+            res = ui_dialog.ShowModal()
+            vals = ui_dialog.get_values()
+            self.data_model_num = int(vals[1]['data_model'])
+        self.data_model = dmodel
+        self.FIRST_RUN = True
+
         self.panel = wx.Panel(self, name='pmag_gui main panel')
         self.InitUI()
 
@@ -56,14 +75,25 @@ class MagMainFrame(wx.Frame):
             self.WD = WD
         self.HtmlIsOpen = False
         self.Bind(wx.EVT_CLOSE, self.on_menu_exit)
-        self.er_magic = builder.ErMagicBuilder(self.WD)
+        if self.data_model_num == 2:
+            self.er_magic = builder.ErMagicBuilder(self.WD, data_model=self.data_model)
+        elif self.data_model_num == 3:
+            wx.CallAfter(self.get_wd_data)
+            #self.contribution = nb.Contribution(self.WD, dmodel=dmodel)
         #self.er_magic.init_default_headers()
         #self.er_magic.init_actual_headers()
+
+    def get_wd_data(self):
+        wait = wx.BusyInfo('Reading in data from current working directory, please wait...')
+        wx.Yield()
+        print '-I- Read in any available data from working directory'
+        self.contribution = nb.Contribution(self.WD, dmodel=self.data_model)
+        del wait
 
 
     def InitUI(self):
 
-        menubar = pmag_gui_menu.MagICMenu(self)
+        menubar = pmag_gui_menu.MagICMenu(self, data_model_num=self.data_model_num)
         self.SetMenuBar(menubar)
 
         #pnl = self.panel
@@ -113,23 +143,34 @@ class MagMainFrame(wx.Frame):
         #---sizer 1 ----
         bSizer1 = wx.StaticBoxSizer(wx.StaticBox(self.panel, wx.ID_ANY, "Import data to working directory"), wx.HORIZONTAL)
 
-        TEXT="1. convert magnetometer files to MagIC format"
-        self.btn1 = buttons.GenButton(self.panel, id=-1, label=TEXT, size=(450, 50), name='step 1')
+        text = "1. Convert magnetometer files to MagIC format"
+        self.btn1 = buttons.GenButton(self.panel, id=-1, label=text,
+                                      size=(450, 50), name='step 1')
         self.btn1.SetBackgroundColour("#FDC68A")
         self.btn1.InitColours()
         self.Bind(wx.EVT_BUTTON, self.on_convert_file, self.btn1)
-        text = "2. (optional) calculate geographic/tilt-corrected directions"
+
+        if self.data_model_num == 3:
+            text = "1a. Convert to 3.0. format"
+            self.btn1a = buttons.GenButton(self.panel, id=-1, label=text,
+                                           size=(450, 50), name='step 1a')
+            self.btn1a.SetBackgroundColour("#FDC68A")
+            self.btn1a.InitColours()
+            self.Bind(wx.EVT_BUTTON, self.on_convert_3, self.btn1a)
+
+
+        text = "2. (optional) Calculate geographic/tilt-corrected directions"
         self.btn2 = buttons.GenButton(self.panel, id=-1, label=text, size=(450, 50), name='step 2')
         self.btn2.SetBackgroundColour("#FDC68A")
         self.btn2.InitColours()
         self.Bind(wx.EVT_BUTTON, self.on_orientation_button, self.btn2)
-        text = "3. complete EarthRef data using EarthRef MagIC Builder "
+        text = "3. (optional) Add MagIC metadata for uploading data to MagIC "
         self.btn3 = buttons.GenButton(self.panel, id=-1, label=text, size=(450, 50), name='step 3')
         self.btn3.SetBackgroundColour("#FDC68A")
         self.btn3.InitColours()
         self.Bind(wx.EVT_BUTTON, self.on_er_data, self.btn3)
 
-        text = "unpack txt file downloaded from MagIC"
+        text = "Unpack txt file downloaded from MagIC"
         self.btn4 = buttons.GenButton(self.panel, id=-1, label=text, size=(300, 50))
         self.btn4.SetBackgroundColour("#FDC68A")
         self.btn4.InitColours()
@@ -146,6 +187,9 @@ class MagMainFrame(wx.Frame):
         bSizer1_1.AddSpacer(20)
         bSizer1_1.Add(self.btn1, wx.ALIGN_TOP)
         bSizer1_1.AddSpacer(20)
+        if self.data_model_num == 3:
+            bSizer1_1.Add(self.btn1a, wx.ALIGN_TOP)
+            bSizer1_1.AddSpacer(20)
         bSizer1_1.Add(self.btn2, wx.ALIGN_TOP)
         bSizer1_1.AddSpacer(20)
         bSizer1_1.Add(self.btn3, wx.ALIGN_TOP)
@@ -183,7 +227,7 @@ class MagMainFrame(wx.Frame):
         #---sizer 3 ----
         bSizer3 = wx.StaticBoxSizer(wx.StaticBox(self.panel, wx.ID_ANY, "Upload to MagIC database"), wx.HORIZONTAL)
 
-        text = "prepare txt file for upload"
+        text = "Create MagIC txt file for upload"
         self.btn_upload = buttons.GenButton(self.panel, id=-1, label=text, size=(300, 50))
         self.btn_upload.SetBackgroundColour("#C4DF9B")
         self.btn_upload.InitColours()
@@ -273,8 +317,10 @@ class MagMainFrame(wx.Frame):
             os.chdir(self.WD)
             self.dir_path.SetValue(self.WD)
             dialog.Destroy()
-            #self.ErMagic_data = ErMagicBuilder.ErMagicBuilder(self.WD)
-            self.er_magic = builder.ErMagicBuilder(self.WD, self.er_magic.data_model)
+            if self.data_model_num == 2:
+                self.er_magic = builder.ErMagicBuilder(self.WD, self.er_magic.data_model)
+            else:
+                self.get_wd_data()
         else:
             dialog.Destroy()
 
@@ -326,7 +372,10 @@ class MagMainFrame(wx.Frame):
 
         outstring = "thellier_gui.py -WD %s"%self.WD
         print "-I- running python script:\n %s"%(outstring)
-        thellier_gui.main(self.WD, standalone_app=False, parent=self)
+        if self.data_model_num == 2.5:
+            thellier_gui.main(self.WD, standalone_app=False, parent=self, DM=self.data_model_num)
+        else:
+            thellier_gui.main(self.WD, standalone_app=False, parent=self, DM=self.data_model_num)
 
     def on_run_demag_gui(self, event):
         outstring = "demag_gui.py -WD %s"%self.WD
@@ -339,16 +388,45 @@ class MagMainFrame(wx.Frame):
         pmag_dialogs_dia.Center()
         self.Hide()
 
-    def on_er_data(self, event):
-        if not os.path.isfile(os.path.join(self.WD, 'magic_measurements.txt')):
-            import dialogs.pmag_widgets as pw
-            pw.simple_warning("Your working directory must have a magic_measurements.txt file to run this step.  Make sure you have fully completed step 1 (import magnetometer file), by combining all imported magnetometer files into one magic_measurements file.")
-            return False
+    def on_convert_3(self, event):
+        # turn files from 2.5 --> 3.0 (rough translation)
+        res = pmag.convert_directory_2_to_3('magic_measurements.txt',
+                                            input_dir=self.WD, output_dir=self.WD)
+        if not res:
+            wx.MessageBox('2.5 --> 3.0 failed. Do you have a magic_measurements.txt file in your working directory?',
+                          'Info', wx.OK | wx.ICON_INFORMATION)
+            return
 
-        #self.ErMagic_frame = ErMagicBuilder.MagIC_model_builder(self.WD, self, self.ErMagic_data)#,self.Data,self.Data_hierarchy)
-        wait = wx.BusyInfo('Compiling required data, please wait...')
-        wx.Yield()
-        self.ErMagic_frame = ErMagicBuilder.MagIC_model_builder(self.WD, self, self.er_magic)#,self.Data,self.Data_hierarchy)
+        # create a contribution
+        self.contribution = nb.Contribution(self.WD)
+        # make skeleton files with specimen, sample, site, location data
+        self.contribution.propagate_measurement_info()
+        # pop up
+        wx.MessageBox('2.5 --> 3.0 translation completed!', 'Info',
+                      wx.OK | wx.ICON_INFORMATION)
+
+
+
+    def on_er_data(self, event):
+        if self.data_model_num == 2:
+            if not os.path.isfile(os.path.join(self.WD, 'magic_measurements.txt')):
+                print '-W- {} is missing'.format(os.path.join(self.WD, 'magic_measurements.txt'))
+                pw.simple_warning("Your working directory must have a magic_measurements.txt file to run this step.  Make sure you have fully completed step 1 (import magnetometer file), by combining all imported magnetometer files into one magic_measurements file.")
+                return False
+
+            #self.ErMagic_frame = ErMagicBuilder.MagIC_model_builder(self.WD, self, self.ErMagic_data)#,self.Data,self.Data_hierarchy)
+            wait = wx.BusyInfo('Compiling required data, please wait...')
+            wx.Yield()
+            self.ErMagic_frame = ErMagicBuilder.MagIC_model_builder(self.WD, self, self.er_magic)#,self.Data,self.Data_hierarchy)
+        elif self.data_model_num == 3:
+            if not os.path.isfile(os.path.join(self.WD, 'measurements.txt')):
+                pw.simple_warning("Your working directory must have a 3.0. format measurements.txt file to run this step.  Make sure you have fully completed step 1 (import magnetometer file) and step 1a (convert to 3.0., if necessary) and try again.")
+                return False
+
+            wait = wx.BusyInfo('Compiling required data, please wait...')
+            wx.Yield()
+            self.ErMagic_frame = ErMagicBuilder.MagIC_model_builder3(self.WD, self, self.contribution)
+
         self.ErMagic_frame.Show()
         self.ErMagic_frame.Center()
 
@@ -360,13 +438,23 @@ class MagMainFrame(wx.Frame):
     def init_check_window(self):
         self.check_dia = pmag_er_magic_dialogs.ErMagicCheckFrame(self, 'Check Data', self.WD, self.er_magic)# initiates the object that will control steps 1-6 of checking headers, filling in cell values, etc.
 
+    def init_check_window3(self):
+        self.check_dia = pmag_er_magic_dialogs.ErMagicCheckFrame3(self, 'Check Data', self.WD, self.contribution)
+
+
     def on_orientation_button(self, event):
         wait = wx.BusyInfo('Compiling required data, please wait...')
         wx.Yield()
         #dw, dh = wx.DisplaySize()
         size = wx.DisplaySize()
         size = (size[0]-0.1 * size[0], size[1]-0.1 * size[1])
-        frame = pmag_basic_dialogs.OrientFrameGrid(self, -1, 'demag_orient.txt', self.WD, self.er_magic, size)
+        if self.data_model_num == 3:
+            frame = pmag_basic_dialogs.OrientFrameGrid3(self, -1, 'demag_orient.txt',
+                                                        self.WD, self.contribution,
+                                                        size)
+        else:
+            frame = pmag_basic_dialogs.OrientFrameGrid(self, -1, 'demag_orient.txt',
+                                                        self.WD, self.er_magic, size)
         frame.Show(True)
         frame.Centre()
         self.Hide()
@@ -414,15 +502,20 @@ class MagMainFrame(wx.Frame):
         print "-I- running python script:\n %s"%(outstring)
         wait = wx.BusyInfo("Please wait, working...")
         wx.Yield()
+        if self.data_model_num == 3:
+            res, error_message, has_problems, all_failing_items = ipmag.upload_magic3(dir_path=self.WD,
+                                                                                      vocab=self.contribution.vocab)
+        if self.data_model_num == 2:
+            res, error_message, errors = ipmag.upload_magic(dir_path=self.WD, data_model=self.er_magic.data_model)
+            del wait
 
-        upfile, error_message, errors = ipmag.upload_magic(dir_path=self.WD, data_model=self.er_magic.data_model)
-        del wait
-        if upfile:
-            text = "You are ready to upload.\n Your file: {}  was generated in MagIC Project Directory.\nDrag and drop this file in the MagIC database.".format(os.path.split(upfile)[1])
+        if res:
+            text = "You are ready to upload.\n Your file: {}  was generated in MagIC Project Directory.\nDrag and drop this file in the MagIC database.".format(os.path.split(res)[1])
             dlg = wx.MessageDialog(self, caption="Saved", message=text, style=wx.OK)
         else:
             text = "There were some problems with the creation of your upload file.\nError message: {}\nSee Terminal/Command Prompt for details".format(error_message)
             dlg = wx.MessageDialog(self, caption="Error", message=text, style=wx.OK)
+
         result = dlg.ShowModal()
         if result == wx.ID_OK:
             dlg.Destroy()
@@ -467,7 +560,7 @@ def main():
     #    import wx.lib.inspection
     #    wx.lib.inspection.InspectionTool().Show()
     app.MainLoop()
-            
+
 
 if __name__ == "__main__":
     main()

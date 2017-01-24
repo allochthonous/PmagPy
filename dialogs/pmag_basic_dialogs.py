@@ -8,12 +8,12 @@ import wx.grid
 import os
 import subprocess
 import sys
-import pmagpy.pmag as pmag
-import pmagpy.ipmag as ipmag
-import pmagpy.check_updates as check_updates
-import dialogs.pmag_widgets as pw
-import dialogs.drop_down_menus as drop_down_menus
-import dialogs.magic_grid as magic_grid
+from pmagpy import pmag
+from pmagpy import ipmag
+from dialogs import pmag_widgets as pw
+from dialogs import drop_down_menus2 as drop_down_menus
+from dialogs import drop_down_menus3
+from dialogs import magic_grid2 as magic_grid
 sys.path.append("../programs") #later fix imports further down in code to "from programs import ...." also imports should be moved to top of file unless import is so large it slows down the program
 from programs import tdt_magic
 from programs import generic_magic
@@ -30,7 +30,7 @@ from programs import jr6_txt_magic
 from programs import jr6_jr6_magic
 from programs import iodp_jr6_magic
 from programs import bgc_magic
-import SPD.mapping.map_magic as map_magic
+from pmagpy.mapping import map_magic
 
 
 class import_magnetometer_data(wx.Dialog):
@@ -74,7 +74,7 @@ class import_magnetometer_data(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self.on_okButton, self.okButton)
         self.cancelButton = wx.Button(self.panel, wx.ID_CANCEL, '&Cancel')
         self.Bind(wx.EVT_BUTTON, self.on_cancelButton, self.cancelButton)
-        self.nextButton = wx.Button(self.panel, id=-1, label='Skip to next step')
+        self.nextButton = wx.Button(self.panel, id=-1, label='Go to next step')
         self.Bind(wx.EVT_BUTTON, self.on_nextButton, self.nextButton)
         hboxok.Add(self.okButton)
         hboxok.AddSpacer(20)
@@ -183,7 +183,7 @@ class combine_magic_dialog(wx.Frame):
         self.cancelButton = wx.Button(self.panel, wx.ID_CANCEL, '&Cancel')
         self.Bind(wx.EVT_BUTTON, self.on_cancelButton, self.cancelButton)
 
-        self.nextButton = wx.Button(self.panel, id=-1, label='Skip to last step')
+        self.nextButton = wx.Button(self.panel, id=-1, label='Go to last step')
         self.Bind(wx.EVT_BUTTON, self.on_nextButton, self.nextButton)
 
         hboxok = wx.BoxSizer(wx.HORIZONTAL)
@@ -919,7 +919,7 @@ class convert_CIT_files_to_MagIC(convert_files_to_MagIC):
         self.bSizer2 = pw.sampling_particulars(pnl)
 
         #---sizer 3 ----
-        #self.bSizer3 = pw.lab_field(pnl)
+        self.bSizer3 = pw.lab_field(pnl)
 
         #---sizer 4 ----
         self.bSizer4 = pw.select_ncn(pnl)
@@ -949,7 +949,7 @@ class convert_CIT_files_to_MagIC(convert_files_to_MagIC):
         vbox.Add(self.bSizer0, flag=wx.ALIGN_LEFT|wx.TOP, border=10)
         vbox.Add(self.bSizer1, flag=wx.ALIGN_LEFT|wx.TOP, border=10)
         vbox.Add(self.bSizer2, flag=wx.ALIGN_LEFT|wx.TOP, border=10)
-        #vbox.Add(self.bSizer3, flag=wx.ALIGN_LEFT|wx.TOP, border=10)
+        vbox.Add(self.bSizer3, flag=wx.ALIGN_LEFT|wx.TOP, border=10)
         vbox.Add(self.bSizer4, flag=wx.ALIGN_LEFT|wx.TOP, border=10)
         vbox.Add(self.bSizer5, flag=wx.ALIGN_LEFT|wx.TOP, border=10)
         vbox.Add(self.bSizer6, flag=wx.ALIGN_LEFT|wx.TOP, border=10)
@@ -997,6 +997,11 @@ class convert_CIT_files_to_MagIC(convert_files_to_MagIC):
         options_dict['site_file'] = site_outfile
         user = self.bSizer1.return_value()
         options_dict['user'] = user
+        dc_flag,dc_params = '',''
+        if self.bSizer3.return_value() != '':
+            dc_params = map(float,self.bSizer3.return_value().split())
+            options_dict['dc_params'] = dc_params
+            dc_flag = '-dc'
         if user:
             user = "-usr " + user
         spec_num = self.bSizer5.return_value()
@@ -1028,7 +1033,7 @@ class convert_CIT_files_to_MagIC(convert_files_to_MagIC):
             options_dict['avg'] = 1
             replicate = '-A'
 
-        COMMAND = "cit_magic.py -WD {} -f {} -F {} {} {} {} {} -ncn {} {} {} -Fsp {} -Fsi {} -Fsa {} {}".format(wd, CIT_file, outfile, particulars, spec_num, loc_name, user, ncn, peak_AF, ID, spec_outfile, site_outfile, samp_outfile, replicate)
+        COMMAND = "cit_magic.py -WD {} -f {} -F {} {} {} {} {} -ncn {} {} {} -Fsp {} -Fsi {} -Fsa {} {} {} {}".format(wd, CIT_file, outfile, particulars, spec_num, loc_name, user, ncn, peak_AF, ID, spec_outfile, site_outfile, samp_outfile, replicate,dc_flag,dc_params)
         # to run as module:
         program_ran, error_message = cit_magic.main(command_line=False, **options_dict)
         if program_ran:
@@ -2248,7 +2253,8 @@ class something(wx.Frame):
 
 class OrientFrameGrid3(wx.Frame):
     def __init__(self, parent, id, title, WD, contribution, size):
-        wx.Frame.__init__(self, parent, -1, title, size=size, name='calculate geographic directions')
+        wx.Frame.__init__(self, parent, -1, title, size=size,
+                          name='calculate geographic directions')
 
         #--------------------
         # initialize stuff
@@ -2263,7 +2269,9 @@ class OrientFrameGrid3(wx.Frame):
         self.contribution = contribution
 
         # contribution has already propagated measurement data...
-
+        if 'samples' not in self.contribution.tables:
+            print '-E- No sample data available'
+            return
         samples_name_list = self.contribution.tables['samples'].df.index.unique()
 
         self.orient_data = {}
@@ -2420,102 +2428,9 @@ class OrientFrameGrid3(wx.Frame):
         self.grid.changes = {'a'}
 
         self.grid.AutoSize()
-        self.drop_down_menu = drop_down_menus.Menus("orient", self, self.grid, '')
+        #self.drop_down_menu = drop_down_menus.Menus("orient", self, self.grid, '')
+        self.drop_down_menu = drop_down_menus3.Menus("orient", self.contribution, self.grid)
         self.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.onLeftClickLabel, self.grid)
-
-
-    # tried to do this one using dataframes
-    # it works, but you have to leave orient_data as:
-    # self.orient_data = samp_container.df.loc[:, col_names]
-    # and not convert it to pmag_data_list
-
-    def create_sheet3(self):
-        '''
-        create an editable grid showing demag_orient.txt
-        '''
-        #--------------------------------
-        # orient.txt supports many other headers
-        # but we will only initialize with
-        # the essential headers for
-        # sample orientation and headers present
-        # in existing demag_orient.txt file
-        #--------------------------------
-
-
-        #--------------------------------
-        # create the grid
-        #--------------------------------
-
-        self.samples_list = sorted(self.orient_data.index)
-
-        display_headers = [header[1] for header in self.headers]
-        self.grid = magic_grid.MagicGrid(self.panel, 'orient grid',
-                                         self.samples_list, display_headers)
-        self.grid.InitUI()
-
-        #--------------------------------
-        # color the columns by groups
-        #--------------------------------
-
-        for i in range(len(self.samples_list)):
-            self.grid.SetCellBackgroundColour(i, 0, "LIGHT GREY")
-            self.grid.SetCellBackgroundColour(i, 1, "LIGHT STEEL BLUE")
-            self.grid.SetCellBackgroundColour(i, 2, "YELLOW")
-            self.grid.SetCellBackgroundColour(i, 3, "YELLOW")
-            self.grid.SetCellBackgroundColour(i, 4, "PALE GREEN")
-            self.grid.SetCellBackgroundColour(i, 5, "PALE GREEN")
-            self.grid.SetCellBackgroundColour(i, 6, "KHAKI")
-            self.grid.SetCellBackgroundColour(i, 7, "KHAKI")
-            self.grid.SetCellBackgroundColour(i, 8, "KHAKI")
-            self.grid.SetCellBackgroundColour(i, 9, "KHAKI")
-            self.grid.SetCellBackgroundColour(i, 10, "KHAKI")
-            self.grid.SetCellBackgroundColour(i, 11, "LIGHT MAGENTA")
-            self.grid.SetCellBackgroundColour(i, 12, "LIGHT MAGENTA")
-
-
-        #--------------------------------
-        # fill data from self.orient_data
-        #--------------------------------
-        headers = [header[0] for header in self.headers]
-
-        for sample in self.samples_list:
-            sample_index = self.samples_list.index(sample)
-            samp_data = self.orient_data.loc[sample]
-            for num, col in enumerate(samp_data.index):
-                val = samp_data[col]
-                self.grid.SetCellValue(sample_index, num, val)
-            #for col_name in self.orient_data.loc[sample].columns:
-            #    if key in headers:
-            #        sample_index = self.samples_list.index(sample)
-            #        i = headers.index(key)
-            #        val = str(self.orient_data[sample][key])
-            #        # if it's a pmag_object, use its name
-            #        try:
-            #            val = val.name
-            #        except AttributeError:
-            #            pass
-            #        self.grid.SetCellValue(sample_index, i, val)
-
-        #--------------------------------
-
-        #--------------------------------
-        # fill in some default values
-        #--------------------------------
-        for row in range(self.grid.GetNumberRows()):
-            col = 1
-            if not self.grid.GetCellValue(row, col):
-                self.grid.SetCellValue(row, col, 'g')
-
-        #--------------------------------
-
-        # temporary trick to get drop-down-menus to work
-        self.grid.changes = {'a'}
-
-        self.grid.AutoSize()
-        self.drop_down_menu = drop_down_menus.Menus("orient", self, self.grid, '')
-        ## add this back in
-        self.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.onLeftClickLabel, self.grid)
-
 
     def update_sheet(self):
         self.grid.Destroy()
@@ -2678,6 +2593,7 @@ class OrientFrameGrid3(wx.Frame):
             self.Parent.Show()
             self.Parent.Raise()
             self.Destroy()
+            self.contribution.add_magic_table('samples')
             return
 
 
@@ -2695,9 +2611,6 @@ class OrientFrameGrid3(wx.Frame):
             self.Parent.Show()
             self.Parent.Raise()
             self.Destroy()
-
-
-
 
 
 

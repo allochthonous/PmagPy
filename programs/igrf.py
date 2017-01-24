@@ -15,8 +15,8 @@ def main():
         This program calculates igrf field values 
     using the routine of Malin and  Barraclough (1981) 
     based on d/igrfs from 1900 to 2010.
-    between 1900 and 1000BCE, it uses CALS3K.4, ARCH3K.1 , or PFM9K
-    Prior to 1000BCE, it uses CALS10k-4b
+    between 1900 and 1000BCE, it uses CALS3K.4, ARCH3K.1 
+    Prior to 1000BCE, it uses PFM9k or CALS10k-4b
     Calculates reference field vector at  specified location and time.
   
     SYNTAX
@@ -32,7 +32,7 @@ def main():
        -plt; make a plot of the time series
        -sav, saves plot and quits
        -fmt [pdf,jpg,eps,svg]  specify format for output figure  (default is svg)
-       -mod [arch3k,cals3k,pfm9k] specify model for 3ka to 1900 AD, default is cals3k.4b
+       -mod [arch3k,cals3k,pfm9k,hfm10k,cals10k_2,shadif14k,cals10k] specify model for 3ka to 1900 AD, default is cals10k
              NB:  program uses IGRF12 for dates 1900 to 2015.
     
     INPUT FORMAT 
@@ -45,6 +45,7 @@ def main():
            space delimited string: date  alt   lat long
     OUTPUT  FORMAT
         Declination Inclination Intensity (nT) date alt lat long
+    MODELS:  ARCH3K: (Korte et al., 2009);CALS3K (Korte & Contable, 2011); CALS10k (is .1b of Korte et al., 2011); PFM9K (Nilsson et al., 2014); HFM10k (is HFM.OL1.A1 of Constable et al., 2016); CALS10k_2 (is cals10k.2 of Constable et al., 2016), SHADIF14k (SHA.DIF.14K of Pavon-Carrasco et al., 2014).
     """
     plot,fmt=0,'svg'
     plt=0
@@ -57,7 +58,7 @@ def main():
     if '-mod' in sys.argv:
         ind=sys.argv.index('-mod')
         mod=sys.argv[ind+1]
-    else: mod='cals3k'
+    else: mod='cals10k'
     if '-f' in sys.argv:
         ind=sys.argv.index('-f')
         file=sys.argv[ind+1]
@@ -118,10 +119,11 @@ def main():
         pylab.ion()
         Ages,Decs,Incs,Ints,VADMs=[],[],[],[],[]
     for line in input:
-        if mod=='':
-            x,y,z,f=pmag.doigrf(line[3]%360.,line[2],line[1],line[0])
-        else:
-            x,y,z,f=pmag.doigrf(line[3]%360.,line[2],line[1],line[0],mod=mod)
+        #if mod=='':
+        #    x,y,z,f=pmag.doigrf(line[3]%360.,line[2],line[1],line[0])
+        #else:
+        #    x,y,z,f=pmag.doigrf(line[3]%360.,line[2],line[1],line[0],mod=mod)
+        x,y,z,f=pmag.doigrf(line[3]%360.,line[2],line[1],line[0],mod=mod)
         Dir=pmag.cart2dir((x,y,z))
         if outfile!="":
             out.write('%8.2f %8.2f %8.0f %7.1f %7.1f %7.1f %7.1f\n'%(Dir[0],Dir[1],f,line[0],line[1],line[2],line[3]))           
