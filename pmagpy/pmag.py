@@ -5543,6 +5543,7 @@ def doigrf(long,lat,alt,date,**kwargs):
             psvmodels,psvcoeffs=get_pfm9k() #  use PFM9k (Nilsson et al., 2014), coefficients from -7000 to 1900
         else:
             psvmodels,psvcoeffs=get_cals10k() # use prior to -1000, back to -8000
+            psvmodels=[int(psvmodel) for psvmodel in psvmodels] # CJR: quick fix for fact that model ages for this model are strings rather than integers, which causes lookup error
 # use geodetic coordinates
     if 'models' in kwargs:
         if 'mod' in kwargs.keys():
