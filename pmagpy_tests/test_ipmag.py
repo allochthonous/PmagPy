@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import unittest
 import os
+import sys
 import matplotlib
+import re
 from pmagpy import pmag
 from pmagpy import ipmag
+from pmagpy import new_builder as nb
 #from pmagpy import find_pmag_dir
-WD = os.getcwd()
+WD = pmag.get_test_WD()
 
 
 class TestIGRF(unittest.TestCase):
@@ -29,6 +33,27 @@ class TestUploadMagic(unittest.TestCase):
         self.dir_path = os.path.join(WD, 'data_files', 'testing')
 
     def tearDown(self):
+        tables = ['measurements', 'specimens', 'samples',
+                  'sites', 'locations', 'ages', 'criteria',
+                  'contribution']
+        tables.extend([tname + "_errors" for tname in tables])
+        possible_files = os.listdir(WD)
+        for table in tables:
+            fname = table + ".txt"
+            if fname in possible_files:
+                try:
+                    print('trying to remove', os.path.join(WD, fname))
+                    os.remove(os.path.join(WD, fname))
+                except OSError:
+                    pass
+        # get rid of partial upload files
+        pattern = re.compile('.*\w*[.]\w*[.]\w*[20]\d{2}\w*.txt$')
+        #pattern = re.compile('\w*[.]\w*[.]\w*[20]\d{2}\w*.txt$')
+        remove = []
+        for f in possible_files:
+            if pattern.match(f):
+                remove.append(f)
+        pmag.remove_files(remove, WD)
         os.chdir(WD)
 
     def test_empty_dir(self):
@@ -66,6 +91,39 @@ class TestUploadMagic(unittest.TestCase):
         directory = os.path.join(self.dir_path, 'my_project_with_errors')
         os.remove(os.path.join(directory, outfile))
 
+    def test3_with_invalid_files(self):
+        dir_path = os.path.join(WD, 'data_files', '3_0', 'Megiddo')
+        outfile, error_message, errors, all_errors = ipmag.upload_magic3(dir_path=dir_path)
+        msg = "file validation has failed.  You may run into problems if you try to upload this file."
+        self.assertEqual(error_message, msg)
+        # delete any upload file that was partially created
+        import re
+        pattern = re.compile('\w*[.]\w*[.]\w*[20]\d{2}\w*.txt$')
+        possible_files = os.listdir(dir_path)
+        files = []
+        for f in possible_files:
+            if pattern.match(f):
+                files.append(f)
+        pmag.remove_files(files, dir_path)
+
+
+    def test3_with_contribution(self):
+        dir_path = os.path.join(WD, 'data_files', '3_0', 'Megiddo')
+        con = nb.Contribution(directory=dir_path)
+        outfile, error_message, errors, all_errors = ipmag.upload_magic3(contribution=con)
+        msg = "file validation has failed.  You may run into problems if you try to upload this file."
+        self.assertEqual(error_message, msg)
+        # delete any upload file that was partially created
+        import re
+        pattern = re.compile('\w*[.]\w*[.]\w*[20]\d{2}\w*.txt$')
+        possible_files = os.listdir(dir_path)
+        files = []
+        for f in possible_files:
+            if pattern.match(f):
+                files.append(f)
+        pmag.remove_files(files, dir_path)
+
+
 
 class Test_iodp_samples_magic(unittest.TestCase):
 
@@ -102,7 +160,12 @@ class Test_iodp_samples_magic(unittest.TestCase):
                                       'odp_magic', 'odp_magic_er_samples.txt')
         infile = os.path.join(self.input_dir, 'samples_318_U1359_B.csv')
         program_ran, outfile = ipmag.iodp_samples_magic(infile)
-        self.assertEqual(open(reference_file).readlines(), open(outfile).readlines())
+        with open(reference_file) as ref_file:
+            ref_lines = ref_file.readlines()
+        with open(outfile) as out_file:
+            out_lines = out_file.readlines()
+        self.assertTrue(program_ran)
+        self.assertEqual(ref_lines, out_lines)
 
 
 
@@ -258,8 +321,8 @@ class TestSUFAR_asc_magic(unittest.TestCase):
     def test_SUFAR4_succeed_option4(self):
         input_dir = os.path.join(WD, 'data_files', 'Measurement_Import',
                                  'SUFAR_asc_magic')
-        print 'WD', WD
-        print 'input_dir', input_dir
+        print('WD', WD)
+        print('input_dir', input_dir)
         infile = 'sufar4-asc_magic_example.txt'
         ofile = 'my_magic_measurements.txt'
         program_ran, outfile = ipmag.SUFAR4_magic(infile,
@@ -306,7 +369,7 @@ class TestAgmMagic(unittest.TestCase):
         self.assertEqual(filename, os.path.join('.', 'agm_magic_example.magic'))
 
 
-#@unittest.skipIf(sys.platform in ['darwin'], 'currently causing fatal errors on OSX')
+@unittest.skipIf(sys.platform in ['darwin'], 'currently causing fatal errors on OSX')
 class TestCoreDepthplot(unittest.TestCase):
 
     def setUp(self):
@@ -337,7 +400,7 @@ class TestCoreDepthplot(unittest.TestCase):
 
     def test_core_depthplot_success(self):
         path = os.path.join(WD, 'data_files', 'core_depthplot')
-        program_ran, plot_name = ipmag.core_depthplot(input_dir_path=path, spc_file='pmag_specimens.txt', samp_file='er_samples.txt', meth='AF', step=15)
+        program_ran, plot_name = ipmag.core_depthplot(input_dir_path=path, spc_file='pmag_specimens.txt', samp_file='er_samples.txt', meth='AF', step=15, data_model_num=2)
         #program_ran, plot_name = True, 'DSDP Site 522_m:_LT-AF-Z_core-depthplot.svg'
         self.assertTrue(program_ran)
         self.assertEqual(plot_name, 'DSDP Site 522_m:_LT-AF-Z_core-depthplot.svg')
@@ -345,7 +408,7 @@ class TestCoreDepthplot(unittest.TestCase):
     def test_core_depthplot_with_sum_file(self):
         path = os.path.join(WD, 'data_files', 'UTESTA', 'UTESTA_MagIC')
         sum_file = 'CoreSummary_XXX_UTESTA.csv'
-        program_ran, plot_name = ipmag.core_depthplot(input_dir_path=path, spc_file='pmag_specimens.txt', samp_file='er_samples.txt', meth='AF', step=15, sum_file=sum_file)
+        program_ran, plot_name = ipmag.core_depthplot(input_dir_path=path, spc_file='pmag_specimens.txt', samp_file='er_samples.txt', meth='AF', step=15, sum_file=sum_file, data_model_num=2)
         self.assertTrue(program_ran)
         outfile = 'UTESTA_m:_LT-AF-Z_core-depthplot.svg'
         self.assertEqual(plot_name, outfile)
@@ -359,17 +422,24 @@ class TestCoreDepthplot(unittest.TestCase):
 
     def test_core_depthplot_success_with_options(self):
         path = os.path.join(WD, 'data_files', 'core_depthplot')
-        program_ran, plot_name = ipmag.core_depthplot(input_dir_path=path, spc_file='pmag_specimens.txt', samp_file='er_samples.txt', meth='AF', step=15, fmt='png', pltInc=False, logit=True, pltTime=True, timescale='gts12', amin=0, amax=3) # pltDec = False causes failure with these data
+        program_ran, plot_name = ipmag.core_depthplot(input_dir_path=path, spc_file='pmag_specimens.txt', samp_file='er_samples.txt', meth='AF', step=15, fmt='png', pltInc=False, logit=True, pltTime=True, timescale='gts12', amin=0, amax=3, data_model_num=2) # pltDec = False causes failure with these data
         self.assertTrue(program_ran)
         self.assertEqual(plot_name, 'DSDP Site 522_m:_LT-AF-Z_core-depthplot.png')
 
     def test_core_depthplot_success_with_other_options(self):
         path = os.path.join(WD, 'data_files', 'core_depthplot')
-        program_ran, plot_name = ipmag.core_depthplot(input_dir_path=path, spc_file='pmag_specimens.txt', age_file='er_ages.txt', meth='AF', step=15, fmt='png', pltInc=False, logit=True, pltTime=True, timescale='gts12', amin=0, amax=3) # pltDec = False causes failure with these data
+        program_ran, plot_name = ipmag.core_depthplot(input_dir_path=path,
+                                                      spc_file='pmag_specimens.txt',
+                                                      age_file='er_ages.txt',
+                                                      meth='AF', step=15,
+                                                      fmt='png', pltInc=False,
+                                                      logit=True, pltTime=True,
+                                                      timescale='gts12',
+                                                      amin=0, amax=3, data_model_num=2) # pltDec = False causes failure with these data
         self.assertTrue(program_ran)
         self.assertEqual(plot_name, 'DSDP Site 522_m:_LT-AF-Z_core-depthplot.png')
 
-#@unittest.skipIf(sys.platform in ['darwin'], 'currently causing fatal errors on OSX')
+@unittest.skipIf(sys.platform in ['darwin'], 'currently causing fatal errors on OSX')
 class TestAnisoDepthplot(unittest.TestCase):
 
     def setUp(self):

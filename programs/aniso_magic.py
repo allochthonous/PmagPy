@@ -1,19 +1,29 @@
 #!/usr/bin/env python
-#
+#  -*- python-indent-offset: 4; -*-
+#pylint: disable=invalid-name,wrong-import-position,line-too-long
 #import draw
+from __future__ import print_function
+from builtins import input
+from builtins import range
 import sys
 import matplotlib
 if matplotlib.get_backend() != "TKAgg":
-  matplotlib.use("TKAgg")
+    matplotlib.use("TKAgg")
 
 import pmagpy.pmag as pmag
 import pmagpy.pmagplotlib as pmagplotlib
+import pmagpy.new_builder as nb
+
 
 def save(ANIS,fmt,title):
-  files={}
-  for key in ANIS.keys():
-      files[key]=title+'_TY:_aniso-'+key+'_.'+fmt
-  pmagplotlib.saveP(ANIS,files)
+    files = {}
+    for key in list(ANIS.keys()):
+        if pmagplotlib.isServer:
+            files[key] = title + '_TY:_aniso-' + key + '_.' + fmt
+        else:
+            files[key] = title.replace('__', '_') + "_aniso-" + key + "." + fmt
+    pmagplotlib.saveP(ANIS, files)
+
 
 def main():
     """
@@ -28,23 +38,23 @@ def main():
     OPTIONS
         -h plots help message and quits
         -usr USER: set the user name
-        -f AFILE, specify rmag_anisotropy formatted file for input
-        -F RFILE, specify rmag_results formatted file for output
+        -f AFILE, specify specimens.txt formatted file for input
+        -fsa SAMPFILE, specify samples.txt file (required to plot by site)
+        -fsi SITEFILE, specify site file (required to include location information)
         -x Hext [1963] and bootstrap
         -B DON'T do bootstrap, do Hext
         -par Tauxe [1998] parametric bootstrap
         -v plot bootstrap eigenvectors instead of ellipses
         -sit plot by site instead of entire file
         -crd [s,g,t] coordinate system, default is specimen (g=geographic, t=tilt corrected)
-        -P don't make any plots - just make rmag_results table
-        -sav don't make the rmag_results table - just save all the plots
+        -P don't make any plots - just fill in the specimens, samples, sites tables
+        -sav don't make the tables - just save all the plots
         -fmt [svg, jpg, eps] format for output images, pdf default
         -gtc DEC INC  dec,inc of pole to great circle [down(up) in green (cyan)
         -d Vi DEC INC; Vi (1,2,3) to compare to direction DEC INC
         -nb N; specifies the number of bootstraps - default is 1000
     DEFAULTS
-       AFILE:  rmag_anisotropy.txt
-       RFILE:  rmag_results.txt
+       AFILE:  specimens.txt
        plot bootstrap ellipses of Constable & Tauxe [1987]
     NOTES
        minor axis: circles
@@ -53,110 +63,101 @@ def main():
        directions are plotted on the lower hemisphere
        for bootstrapped eigenvector components: Xs: blue, Ys: red, Zs: black
 """
-#
-    dir_path="."
-    version_num=pmag.get_version()
-    verbose=pmagplotlib.verbose
-    args=sys.argv
-    ipar,ihext,ivec,iboot,imeas,isite,iplot,vec=0,0,0,1,1,0,1,0
-    hpars,bpars,PDir=[],[],[]
-    CS,crd='-1','s'
-    nb=1000
-    fmt='pdf'
-    ResRecs=[]
-    orlist=[]
-    outfile,comp,Dir,gtcirc,PDir='rmag_results.txt',0,[],0,[]
-    infile='rmag_anisotropy.txt'
+    args = sys.argv
     if "-h" in args:
-        print main.__doc__
+        print(main.__doc__)
         sys.exit()
-    if '-WD' in args:
-        ind=args.index('-WD')
-        dir_path=args[ind+1]
-    if '-nb' in args:
-        ind=args.index('-nb')
-        nb=int(args[ind+1])
-    if '-usr' in args:
-        ind=args.index('-usr')
-        user=args[ind+1]
-    else:
-        user=""
-    if '-B' in args:iboot,ihext=0,1
-    if '-par' in args:ipar=1
-    if '-x' in args:ihext=1
-    if '-v' in args:ivec=1
-    if '-sit' in args:isite=1
-    if '-P' in args:iplot=0
-    if '-f' in args:
-        ind=args.index('-f')
-        infile=args[ind+1]
-    if '-F' in args:
-        ind=args.index('-F')
-        outfile=args[ind+1]
+    #version_num = pmag.get_version()
+    verbose = pmagplotlib.verbose
+    dir_path = pmag.get_named_arg_from_sys("-WD", ".")
+    num_bootstraps = pmag.get_named_arg_from_sys("-nb", 1000)
+    #user = pmag.get_named_arg_from_sys("-usr", "")
+    ipar = pmag.get_flag_arg_from_sys("-par", true=1, false=0)
+    ihext = pmag.get_flag_arg_from_sys("-x", true=1, false=0)
+    ivec = pmag.get_flag_arg_from_sys("-v", true=1, false=0)
+    iplot = pmag.get_flag_arg_from_sys("-P", true=0, false=1)
+    isite = pmag.get_flag_arg_from_sys("-sit", true=1, false=0)
+    iboot, vec = 1, 0
+    infile = pmag.get_named_arg_from_sys('-f', 'specimens.txt')
+    samp_file = pmag.get_named_arg_from_sys('-fsa', 'samples.txt')
+    site_file = pmag.get_named_arg_from_sys('-fsi', 'sites.txt')
+    #outfile = pmag.get_named_arg_from_sys("-F", "rmag_results.txt")
+    fmt = pmag.get_named_arg_from_sys("-fmt", "pdf")
+    hpars, bpars = [], []
+    CS, crd = -1, 's'
+    ResRecs = []
+    comp, Dir, PDir = 0, [], []
+    if '-B' in args:
+        iboot, ihext = 0, 1
     if '-crd' in sys.argv:
-        ind=sys.argv.index('-crd')
-        crd=sys.argv[ind+1]
-        if crd=='g':CS='0'
-        if crd=='t': CS='100'
-    if '-fmt' in args:
-        ind=args.index('-fmt')
-        fmt=args[ind+1]
+        ind = sys.argv.index('-crd')
+        crd = sys.argv[ind+1]
+        if crd == 'g':
+            CS = 0
+        if crd == 't':
+            CS = 100
     if '-sav' in args:
-        plots=1
-        verbose=0
+        plots = 1
+        verbose = 0
     else:
-        plots=0
+        plots = 0
     if '-gtc' in args:
-        ind=args.index('-gtc')
-        d,i=float(args[ind+1]),float(args[ind+2])
+        ind = args.index('-gtc')
+        d, i = float(args[ind+1]), float(args[ind+2])
         PDir.append(d)
         PDir.append(i)
     if '-d' in args:
-        comp=1
-        ind=args.index('-d')
-        vec=int(args[ind+1])-1
-        Dir=[float(args[ind+2]),float(args[ind+3])]
-#
-# set up plots
-#
-    if infile[0]!='/':infile=dir_path+'/'+infile
-    if outfile[0]!='/':outfile=dir_path+'/'+outfile
-    ANIS={}
-    initcdf,inittcdf=0,0
-    ANIS['data'],ANIS['conf']=1,2
-    if iboot==1:
-        ANIS['tcdf']=3
-        if iplot==1:
-            inittcdf=1
-            pmagplotlib.plot_init(ANIS['tcdf'],5,5)
-        if comp==1 and iplot==1:
-            initcdf=1
-            ANIS['vxcdf'],ANIS['vycdf'],ANIS['vzcdf']=4,5,6
-            pmagplotlib.plot_init(ANIS['vxcdf'],5,5)
-            pmagplotlib.plot_init(ANIS['vycdf'],5,5)
-            pmagplotlib.plot_init(ANIS['vzcdf'],5,5)
-    if iplot==1:
-        pmagplotlib.plot_init(ANIS['conf'],5,5)
-        pmagplotlib.plot_init(ANIS['data'],5,5)
-# read in the data
-    data,ifiletype=pmag.magic_read(infile)
-    for rec in data:  # find all the orientation systems
-        if 'anisotropy_tilt_correction' not in rec.keys():rec['anisotropy_tilt_correction']='-1'
-        if rec['anisotropy_tilt_correction'] not in orlist:
-            orlist.append(rec['anisotropy_tilt_correction'])
+        comp = 1
+        ind = args.index('-d')
+        vec = int(args[ind+1])-1
+        Dir = [float(args[ind+2]), float(args[ind+3])]
+
+    #
+    # set up plots
+    #
+    ANIS = {}
+    initcdf, inittcdf = 0, 0
+    ANIS['data'], ANIS['conf'] = 1, 2
+    if iboot == 1:
+        ANIS['tcdf'] = 3
+        if iplot == 1:
+            inittcdf = 1
+            pmagplotlib.plot_init(ANIS['tcdf'], 5, 5)
+        if comp == 1 and iplot == 1:
+            initcdf = 1
+            ANIS['vxcdf'], ANIS['vycdf'], ANIS['vzcdf'] = 4, 5, 6
+            pmagplotlib.plot_init(ANIS['vxcdf'], 5, 5)
+            pmagplotlib.plot_init(ANIS['vycdf'], 5, 5)
+            pmagplotlib.plot_init(ANIS['vzcdf'], 5, 5)
+    if iplot == 1:
+        pmagplotlib.plot_init(ANIS['conf'], 5, 5)
+        pmagplotlib.plot_init(ANIS['data'], 5, 5)
+    # read in the data
+    fnames = {'specimens': infile, 'samples': samp_file, 'sites': site_file}
+    con = nb.Contribution(dir_path, read_tables=['specimens', 'samples', 'sites'],
+                          custom_filenames=fnames)
+    con.propagate_location_to_specimens()
+    spec_container = con.tables['specimens']
+    # get only anisotropy records
+    spec_df = spec_container.get_records_for_code('AE-', strict_match=False)
+    if 'aniso_tilt_correction' not in spec_df.columns:
+        spec_df['aniso_tilt_correction'] = None
+    orlist = spec_df['aniso_tilt_correction'].dropna().unique()
     if CS not in orlist:
-        if len(orlist)>0:
-            CS=orlist[0]
+        if len(orlist) > 0:
+            CS = orlist[0]
         else:
-            CS='-1'
-        if CS=='-1':crd='s'
-        if CS=='0':crd='g'
-        if CS=='100':crd='t'
-        if verbose:print "desired coordinate system not available, using available: ",crd
-    if isite==1:
-        sitelist=[]
-        for rec in data:
-            if rec['er_site_name'] not in sitelist:sitelist.append(rec['er_site_name'])
+            CS = -1
+        if CS == -1:
+            crd = 's'
+        if CS == 0:
+            crd = 'g'
+        if CS == 100:
+            crd = 't'
+        if verbose:
+            print("desired coordinate system not available, using available: ", crd)
+    if isite == 1:
+        sitelist = spec_df['site'].unique()
         sitelist.sort()
         plt=len(sitelist)
     else:plt=1
@@ -387,78 +388,89 @@ def main():
                       pmagplotlib.plot_init(ANIS['vzcdf'],5,5)
                   Dir,comp=[],1
                   print """
+
                       Input: Vi D I to  compare  eigenvector Vi with direction D/I
                              where Vi=1: principal
                                    Vi=2: major
                                    Vi=3: minor
                                    D= declination of comparison direction
-                                   I= inclination of comparison direction"""
-                  con=1
-                  while con==1:
-                      try:
-                          vdi=raw_input("Vi D I: ").split()
-                          vec=int(vdi[0])-1
-                          Dir=[float(vdi[1]),float(vdi[2])]
-                          con=0
-                      except IndexError:
-                          print " Incorrect entry, try again "
-                  bpars,hpars=pmagplotlib.plotANIS(ANIS,Ss,iboot,ihext,ivec,ipar,title,iplot,comp,vec,Dir,nb)
-                  Dir,comp=[],0
-              if ans=='g':
-                  con,cnt=1,0
-                  while con==1:
-                      try:
-                          print " Input:  input pole to great circle ( D I) to  plot a great circle:   "
-                          di=raw_input(" D I: ").split()
-                          PDir.append(float(di[0]))
-                          PDir.append(float(di[1]))
-                          con=0
-                      except:
-                          cnt+=1
-                          if cnt<10:
-                              print " enter the dec and inc of the pole on one line "
-                          else:
-                              print "ummm - you are doing something wrong - i give up"
-                              sys.exit()
-                  pmagplotlib.plotC(ANIS['data'],PDir,90.,'g')
-                  pmagplotlib.plotC(ANIS['conf'],PDir,90.,'g')
-                  if verbose and plots==0:pmagplotlib.drawFIGS(ANIS)
-              if ans=="p":
-                  k-=2
-                  goon=0
-              if ans=="q":
-                  k=plt
-                  goon=0
-              if ans=="s":
-                  keepon=1
-                  site=raw_input(" print site or part of site desired: ")
-                  while keepon==1:
-                      try:
-                          k=sitelist.index(site)
-                          keepon=0
-                      except:
-                          tmplist=[]
-                          for qq in range(len(sitelist)):
-                              if site in sitelist[qq]:tmplist.append(sitelist[qq])
-                          print site," not found, but this was: "
-                          print tmplist
-                          site=raw_input('Select one or try again\n ')
-                          k=sitelist.index(site)
-                  goon,ans=0,""
-              if ans=="a":
-                  locs=pmag.makelist(Locs)
-                  title="LO:_"+locs+'_SI:__'+'_SA:__SP:__CO:_'+crd
-                  save(ANIS,fmt,title)
-                  goon=0
-      else:
-          if verbose:print 'skipping plot - not enough data points'
-          k+=1
-#   put rmag_results stuff here
-    if len(ResRecs)>0:
-        ResOut,keylist=pmag.fillkeys(ResRecs)
-        pmag.magic_write(outfile,ResOut,'rmag_results')
+                                   I= inclination of comparison direction""")
+                    con = 1
+                    while con == 1:
+                        try:
+                            vdi = input("Vi D I: ").split()
+                            vec = int(vdi[0])-1
+                            Dir = [float(vdi[1]), float(vdi[2])]
+                            con = 0
+                        except IndexError:
+                            print(" Incorrect entry, try again ")
+                    bpars, hpars = pmagplotlib.plotANIS(ANIS, Ss, iboot, ihext, ivec, ipar, title,
+                                                        iplot, comp, vec, Dir, num_bootstraps)
+                    Dir, comp = [], 0
+                if ans == 'g':
+                    con, cnt = 1, 0
+                    while con == 1:
+                        try:
+                            print(" Input:  input pole to great circle ( D I) to  plot a great circle:   ")
+                            di = input(" D I: ").split()
+                            PDir.append(float(di[0]))
+                            PDir.append(float(di[1]))
+                            con=0
+                        except:
+                            cnt += 1
+                            if cnt < 10:
+                                print(" enter the dec and inc of the pole on one line ")
+                            else:
+                                print("ummm - you are doing something wrong - i give up")
+                                sys.exit()
+                    pmagplotlib.plotC(ANIS['data'], PDir, 90., 'g')
+                    pmagplotlib.plotC(ANIS['conf'], PDir, 90., 'g')
+                    if verbose and plots == 0:
+                        pmagplotlib.drawFIGS(ANIS)
+                if ans == "p":
+                    k -= 2
+                    goon = 0
+                if ans == "q":
+                    k = plt
+                    goon = 0
+                if ans == "s":
+                    keepon = 1
+                    site = input(" print site or part of site desired: ")
+                    while keepon == 1:
+                        try:
+                            k = sitelist.index(site)
+                            keepon = 0
+                        except:
+                            tmplist = []
+                            for qq in range(len(sitelist)):
+                                if site in sitelist[qq]:
+                                    tmplist.append(sitelist[qq])
+                            print(site, " not found, but this was: ")
+                            print(tmplist)
+                            site = input('Select one or try again\n ')
+                            k = sitelist.index(site)
+                    goon, ans = 0, ""
+                if ans == "a":
+                    locs = pmag.makelist(Locs)
+                    site_name = "_"
+                    if isite:
+                        site_name = site
+                    if pmagplotlib.isServer: # use server plot naming convention
+                        title = "LO:_" + locs + '_SI:_' + site_name + '_SA:__SP:__CO:_' + crd
+                    else: # use more readable plot naming convention
+                        title = "{}_{}_{}".format(locs, site_name, crd)
+                    save(ANIS, fmt, title)
+                    goon = 0
+        else:
+            if verbose:
+                print('skipping plot - not enough data points')
+            k += 1
+    #   put rmag_results stuff here
+    #if len(ResRecs)>0:
+    #    ResOut,keylist=pmag.fillkeys(ResRecs)
+    #    pmag.magic_write(outfile,ResOut,'rmag_results')
     if verbose:
-        print " Good bye "
-#
-if __name__=="__main__":
+        print(" Good bye ")
+
+if __name__ == "__main__":
     main()

@@ -1,13 +1,17 @@
 #!/usr/bin/env python
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import zip
+from builtins import object
 import pandas as pd
-from pandas import Series, DataFrame
-import urllib2
-import httplib
+from pandas import Series
+#import urllib2
+#import httplib
 import json
 import os
-#import backup_vocabulary as backup
-import find_pmag_dir
-import data_model3
+#import cached vocabulries as backup
+from . import find_pmag_dir
+from . import data_model3 as data_model
 pmag_dir = find_pmag_dir.get_pmag_dir()
 data_model_dir = os.path.join(pmag_dir, 'pmagpy', 'data_model')
 # if using with py2app, the directory structure is flat,
@@ -18,26 +22,37 @@ if not os.path.exists(data_model_dir):
 
 class Vocabulary(object):
 
-    def __init__(self):
+    def __init__(self, dmodel=None):
         self.vocabularies = []
         self.possible_vocabularies = []
         self.all_codes = []
         self.code_types = []
         self.methods = []
         self.age_methods = []
+        if isinstance(dmodel, data_model.DataModel):
+            self.data_model = dmodel
+            Vocabulary.dmodel = dmodel
+        else:
+            try:
+                self.data_model = Vocabulary.dmodel
+            except AttributeError:
+                Vocabulary.dmodel = data_model.DataModel()
+                self.data_model = Vocabulary.dmodel
+        self.get_all_vocabulary()
 
 
     ## Get method codes
 
     def get_meth_codes(self):
-        try:
-            raw_codes = pd.io.json.read_json('https://beta.earthref.org/MagIC/method-codes.json')
-            print '-I- Getting method codes from earthref.org'
-        except Exception as ex:
-            print ex, type(ex)
-            raw_codes = pd.io.json.read_json(os.path.join(data_model_dir, "method_codes.json"))
-            print "-I- Couldn't connect to earthref.org, using cached method codes"
-        code_types = raw_codes.ix['label']
+        #try:
+        #    raw_codes = pd.io.json.read_json('https://www2.earthref.org/MagIC/method-codes.json')
+        #    print '-I- Getting method codes from earthref.org'
+        #except Exception as ex:
+        #    print ex, type(ex)
+        #    print "-I- Couldn't connect to earthref.org, using cached method codes"
+        print("-I- Using cached method codes")
+        raw_codes = pd.io.json.read_json(os.path.join(data_model_dir, "method_codes.json"))
+        code_types = raw_codes.loc['label']
         all_codes = []
         for code_name in code_types.index:
             df = pd.DataFrame(raw_codes[code_name]['codes'])
@@ -59,7 +74,7 @@ class Vocabulary(object):
         code_types = raw_codes.T
         code_types['age'] = False
         age = ['geochronology_method']
-        code_types.ix[age, 'age'] = True
+        code_types.loc[age, 'age'] = True
         code_types['other'] = ~code_types['age']
         return all_codes, code_types
 
@@ -110,16 +125,18 @@ class Vocabulary(object):
         Get all non-method controlled vocabularies
         """
         controlled_vocabularies = []
-        print '-I- Importing controlled vocabularies from https://earthref.org'
-        #url = 'https://api.earthref.org/MagIC/vocabularies.json'
-        #url = os.path.join(data_model_dir, "controlled_vocabularies_July_15_2016.json")
-        url = 'https://beta.earthref.org/vocabularies/controlled.json'
-        try:
-            data = pd.io.json.read_json(url)
-        except:
-            print '-I- Could not connect to earthref.org, using cached vocabularies instead'
-            fname = os.path.join(data_model_dir, "controlled_vocabularies_July_15_2016.json")
-            data = pd.io.json.read_json(fname)
+        #print '-I- Importing controlled vocabularies from https://earthref.org'
+        #url = 'https://www2.earthref.org/vocabularies/controlled.json'
+        #try:
+        #    data = pd.io.json.read_json(url)
+        #except Exception as ex:
+        #    print ex, type(ex)
+        #    print '-I- Could not connect to earthref.org, using cached vocabularies instead'
+        #    fname = os.path.join(data_model_dir, "controlled_vocabularies_February_6_2017.json")
+        #    data = pd.io.json.read_json(fname)
+        print('-I- Using cached vocabularies')
+        fname = os.path.join(data_model_dir, "controlled_vocabularies_February_6_2017.json")
+        data = pd.io.json.read_json(fname)
         possible_vocabularies = data.columns
         ## this line means, grab every single controlled vocabulary
         vocab_types = list(possible_vocabularies)
@@ -142,11 +159,11 @@ class Vocabulary(object):
                 return None
 
         vocab_col_names = []
-        data_model = data_model3.DataModel()
+        data_model = self.data_model #data_model3.DataModel()
         for dm_key in data_model.dm:
             df = data_model.dm[dm_key]
             df['vocab_name'] = df['validations'].apply(get_cv_from_list)
-            lst = zip(df[df['vocab_name'].notnull()]['vocab_name'], df[df['vocab_name'].notnull()].index)
+            lst = list(zip(df[df['vocab_name'].notnull()]['vocab_name'], df[df['vocab_name'].notnull()].index))
             # in lst, first value is the name of the controlled vocabulary
             # second value is the name of the dataframe column
             vocab_col_names.extend(lst)
@@ -160,7 +177,8 @@ class Vocabulary(object):
 
         # add in boolean category to controlled vocabularies
         bool_items = [{'item': True}, {'item': False}, {'item': 'true'},
-                      {'item': 'false'}, {'item': 0}, {'item': 1}]
+                      {'item': 'false'}, {'item': 0}, {'item': 1},
+                      {'item': 0.0}, {'item': 1.0}]
         series = Series({'label': 'Boolean', 'items': bool_items})
         data['boolean'] = series
         # use vocabulary name to get possible values for the column name
@@ -168,7 +186,6 @@ class Vocabulary(object):
             if vocab[0] == "magic_table_column":
                 vocab_col_names.remove(("magic_table_column", "table_column"))
                 continue
-
             items = data[vocab[0]]['items']
             stripped_list = [item['item'] for item in items]
             controlled_vocabularies.append(stripped_list)
@@ -184,17 +201,18 @@ class Vocabulary(object):
         """
         Get all non-method suggested vocabularies
         """
-        controlled_vocabularies = []
-        print '-I- Importing suggested vocabularies from https://earthref.org'
-        #url = 'https://api.earthref.org/MagIC/vocabularies.json'
-        #url = os.path.join(data_model_dir, "controlled_vocabularies_July_15_2016.json")
-        url = 'https://beta.earthref.org/vocabularies/suggested.json'
-        try:
-            data = pd.io.json.read_json(url)
-        except:
-            print '-I- Could not connect to earthref.org, using cached vocabularies instead'
-            fname = os.path.join(data_model_dir, "controlled_vocabularies_July_15_2016.json")
-            data = pd.io.json.read_json(fname)
+        suggested_vocabularies = []
+        print('-I- Importing suggested vocabularies from https://earthref.org')
+        url = 'https://www2.earthref.org/vocabularies/suggested.json'
+        #try:
+        #    data = pd.io.json.read_json(url)
+        #except:
+        #    print '-I- Could not connect to earthref.org, using cached vocabularies instead'
+        #    fname = os.path.join(data_model_dir, "suggested_vocabularies_February_6_2017.json")
+        #    data = pd.io.json.read_json(fname)
+        print('-I- Using cached suggested vocabularies')
+        fname = os.path.join(data_model_dir, "suggested_vocabularies_February_6_2017.json")
+        data = pd.io.json.read_json(fname)
         possible_vocabularies = data.columns
         ## this line means, grab every single controlled vocabulary
         vocab_types = list(possible_vocabularies)
@@ -217,11 +235,11 @@ class Vocabulary(object):
                 return None
 
         vocab_col_names = []
-        data_model = data_model3.DataModel()
+        data_model = self.data_model #data_model3.DataModel()
         for dm_key in data_model.dm:
             df = data_model.dm[dm_key]
             df['vocab_name'] = df['validations'].apply(get_cv_from_list)
-            lst = zip(df[df['vocab_name'].notnull()]['vocab_name'], df[df['vocab_name'].notnull()].index)
+            lst = list(zip(df[df['vocab_name'].notnull()]['vocab_name'], df[df['vocab_name'].notnull()].index))
             # in lst, first value is the name of the controlled vocabulary
             # second value is the name of the dataframe column
             vocab_col_names.extend(lst)
@@ -252,13 +270,12 @@ class Vocabulary(object):
             items = data[vocab[0]]['items']
             #print 'items', items
             stripped_list = [item['item'] for item in items]
-            controlled_vocabularies.append(stripped_list)
+            suggested_vocabularies.append(stripped_list)
         # create series with the column name as the index,
         # and the possible values as the values
         ind_values = [i[1] for i in vocab_col_names]
-        vocabularies = pd.Series(controlled_vocabularies, index=ind_values)
+        vocabularies = pd.Series(suggested_vocabularies, index=ind_values)
         return vocabularies
-
 
 
     ## Get method codes and controlled vocabularies

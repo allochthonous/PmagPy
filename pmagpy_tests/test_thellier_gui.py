@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
 import unittest
-import wx,os,shutil,sys
+import wx, os, shutil, sys
+from numpy import array, isnan
 from programs import thellier_gui
+from pmagpy import pmag
 import dialogs.thellier_interpreter as thellier_interpreter
-from numpy import array,isnan
+
 
 
 @unittest.skipIf(any([arg for arg in sys.argv if 'discover' in arg]), 'seg fault when run with other tests')
@@ -16,7 +18,6 @@ class TestThellierGUI(unittest.TestCase):
         self.pnl = self.frame.GetChildren()[0]
 
     def tearDown(self):
-        self.app.Destroy()
         try: os.remove(os.path.join(project_WD, "rmag_anisotropy.txt"))
         except OSError: pass
         try: os.remove(os.path.join(project_WD, "rmag_anisotropy.log"))
@@ -24,9 +25,13 @@ class TestThellierGUI(unittest.TestCase):
         try: os.remove(os.path.join(project_WD, "rmag_results.txt"))
         except OSError: pass
         os.chdir(WD)
+        wx.CallAfter(self.app.Destroy)
 
     def test_empty_dir(self):
-        thellier_gui.Arai_GUI(empty_WD, DM=2)
+        try:
+            thellier_gui.Arai_GUI(empty_WD, DM=2)
+        except SystemExit as ex:
+            self.assertTrue(ex)
 
     def test_main_panel_is_created(self):
         """
@@ -83,18 +88,18 @@ class TestThellierGUI(unittest.TestCase):
         self.frame.ProcessEvent(write_redo_event)
         self.assertTrue(os.path.isfile(os.path.join(self.frame.WD, "thellier_GUI.redo")))
 
-        old_interps = {sp : self.frame.Data[sp]['pars'] for sp in self.frame.Data.keys()}
+        old_interps = {sp : self.frame.Data[sp]['pars'] for sp in list(self.frame.Data.keys())}
 
         self.frame.ProcessEvent(clear_interps_event)
         cleared_vals = []
-        [cleared_vals.extend(self.frame.Data[sp]['pars'].keys()) for sp in self.frame.Data.keys()]
+        [cleared_vals.extend(list(self.frame.Data[sp]['pars'].keys())) for sp in list(self.frame.Data.keys())]
         self.assertEqual(cleared_vals.count('lab_dc_field'), len(cleared_vals)/3)
         self.assertEqual(cleared_vals.count('er_specimen_name'), len(cleared_vals)/3)
         self.assertEqual(cleared_vals.count('er_sample_name'), len(cleared_vals)/3)
 
         self.frame.ProcessEvent(read_redo_event)
-        new_interps = {sp : self.frame.Data[sp]['pars'] for sp in self.frame.Data.keys()}
-        self.assertTrue(all([array(old_interps[k][k2]).all()==array(new_interps[k][k2]).all() if hasattr(old_interps[k][k2],'__iter__') else old_interps[k][k2]==new_interps[k][k2] for k in new_interps.keys() for k2 in new_interps[k].keys() if isinstance(old_interps[k][k2],float) and isinstance(new_interps[k][k2],float) and not isnan(old_interps[k][k2]) and not isnan(new_interps[k][k2])]))
+        new_interps = {sp : self.frame.Data[sp]['pars'] for sp in list(self.frame.Data.keys())}
+        self.assertTrue(all([array(old_interps[k][k2]).all()==array(new_interps[k][k2]).all() if hasattr(old_interps[k][k2],'__iter__') else old_interps[k][k2]==new_interps[k][k2] for k in list(new_interps.keys()) for k2 in list(new_interps[k].keys()) if isinstance(old_interps[k][k2],float) and isinstance(new_interps[k][k2],float) and not isnan(old_interps[k][k2]) and not isnan(new_interps[k][k2])]))
 
         self.assertTrue(os.path.isfile(os.path.join(self.frame.WD, "thellier_GUI.redo")))
         try: os.remove(os.path.join(self.frame.WD, "thellier_GUI.redo"))
@@ -147,7 +152,7 @@ def revert_from_backup(WD):
 
 if __name__ == '__main__':
     # set constants
-    WD = os.getcwd()
+    WD = pmag.get_test_WD()
     project_WD = os.path.join(WD, 'data_files', 'testing', 'my_project')
     empty_WD = os.path.join(os.getcwd(), 'pmagpy_tests', 'examples', 'empty_dir')
 

@@ -1,6 +1,6 @@
-# Developer's Guide
+# Contributing
 
-## Contributing
+## Ways to contribute
 
 As an open-source, community project, we welcome improvements and feedback!  There are two main ways to contribute to the PmagPy project.
 
@@ -8,9 +8,12 @@ As an open-source, community project, we welcome improvements and feedback!  The
 
 2. If you want to add a new feature yourself or fix a bug yourself, that's great too.  The process for adding a feature looks like this: fork the PmagPy repository, create a branch for your feature or bugfix, make some changes, and then submit a pull request.  Don't worry if you don't know how to do all of those steps!  If you aren't familiar with git, Github, or the details of this process, you will find this short [tutorial](https://guides.github.com/activities/forking/) helpful.  If you're still stuck after that but want to contribute, you can create a [Github issue](https://github.com/PmagPy/PmagPy/issues) and we will help get you sorted.  Depending on what kind of contribution you are making, you may also want to add some tests.  See our [testing README](https://github.com/PmagPy/PmagPy/blob/master/pmagpy_tests/README.md) for details on making and running PmagPy tests.
 
+If you will be making significant contributions via git, we have some additional guidelines for [good git protocols](#git-protocols).
+
 ## Style guidelines
 
-Readable code is good code.  To that end, we request that contributors adhere to reasonable style guidelines.  For more information about standard Python style guidelines, see [PEP 8](https://www.python.org/dev/peps/pep-0008/).
+Good code must be readable.  To that end, we request that contributors try to write code that can be understood by others!  One way to do this is by adhering to reasonable style guidelines.  For more information about standard Python style guidelines, see [PEP 8](https://www.python.org/dev/peps/pep-0008/).
+
 
 
 ## Testing guidelines
@@ -20,7 +23,7 @@ For information about writing and running tests, see the [testing README](https:
 
 ## Directory structure
 
-**Coming soon:** links to the relevant Jupyter notebooks where you can see how some of these pieces work.
+Next we have a breakdown of how the PmagPy repository is structured.  In some cases, we have included relevant Jupyter notebooks so that you can get an interactive demonstration of how some these pieces of code work.
 
 ### Key directories
 
@@ -30,12 +33,12 @@ The `pmagpy` directory contains all the low-level functionality that the PmagPy 
   - a utility for building up MagIC contributions -- new\_builder.py
   - modules for interfacing with the data models (controlled\_vocabularies2.py, controlled\_vocabularies3.py, and data\_model3.py), as well as a full backup of the 2.5 and 3.0. data model (in the `data_model` subdirectory).
 
-To see a notebook with examples of how to use pmag.py and ipmag.py, see the [Example PmagPy Notebook](https://github.com/PmagPy/2016_Tauxe-et-al_PmagPy_Notebooks/blob/master/Example_PmagPy_Notebook.ipynb)
+To see a notebook with examples of how to use pmag.py and ipmag.py, see the [Example_PmagPy_Notebook.ipynb](https://github.com/PmagPy/2016_Tauxe-et-al_PmagPy_Notebooks/blob/master/Example_PmagPy_Notebook.ipynb)
 
-To actually _run_ that notebook:
+To actually _run_ that notebook you will need to download it from the 2016\_Tauxe-et-al\_PmagPy\_notebooks repository:
 
-Go into your command line.
-Change directories into a directory where you keep projects.
+- Go into your command line.
+- Change directories into a directory where you keep projects.
 
 `git clone git@github.com:PmagPy/2016_Tauxe-et-al_PmagPy_Notebooks.git`
 
@@ -43,10 +46,12 @@ Change directories into a directory where you keep projects.
 
 `jupyter notebook`
 
-A browser window will open automatically.
-Click Example\_PmagPy\_Notebook.ipynb
+- A browser window will open automatically. Click Example\_PmagPy\_Notebook.ipynb
 
-For more examples of how to use ipmag.py/pmag.py, try Additional\_PmagPy\_Examples.ipynb as well (located in the same directory as the previous notebook).
+- For more examples of how to use ipmag.py/pmag.py, try Additional\_PmagPy\_Examples.ipynb as well (located in the same directory as the previous notebook).
+
+To see example notebooks for building and examing a MagIC contribution, see [Intro to MagIC DataFrames.ipynb](https://github.com/PmagPy/PmagPy/blob/release/data_files/notebooks/Intro%20to%20MagicDataFrames.ipynb) and [Intro to MagIC Contributions.ipynb](https://github.com/PmagPy/PmagPy/blob/release/data_files/notebooks/Intro%20to%20MagIC%20Contributions.ipynb).  To run those notebooks, follow the [instructions for running PmagPy notebooks](#running-notebooks).
+
 
 #### SPD
 The `SPD` directory contains a program to calculate statistics using Greig Paterson's [standard paleointensity definitions](https://earthref.org/PmagPy/SPD/home.html).
@@ -54,27 +59,9 @@ The `SPD` directory contains a program to calculate statistics using Greig Pater
 #### programs
 The `programs` directory contains executable programs that are installed as part of the pmagpy-cli package and can be run on the command-line.
 
-To see a notebook with examples of how to run most of the command-line programs, see the [command-line program notebook](https://github.com/PmagPy/PmagPy/blob/master/data_files/notebooks/_PmagPy.ipynb).
+To see a notebook with examples of how to run most of the command-line programs, see the [_PmagPy.ipynb](https://github.com/PmagPy/PmagPy/blob/master/data_files/notebooks/_PmagPy.ipynb).  Also see [_PmagPy_3.0.ipynb](https://github.com/PmagPy/PmagPy/blob/master/data_files/notebooks/_PmagPy_3.0.ipynb).
 
-To actually run the notebook, you will need to follow these directions.
-
-- If you have installed PmagPy using pip (standard), you will need to move your data_files to an accessible location.  To do that, you will use the command-line program `move_data_files.py`.
-
-    + You will need to go into your command line to run this program.  You can run it from the directory in which you want to place the PmagPy data_files (perhaps your Desktop), using this command:
-
-    `move_data_files.py -d .` # ("." represents your current directory)
-
-    + Alternatively, you can run it from any directory in your command line using the full destination directory name:
-
-    `move_data_files.py -d ~/Desktop`
-
-    + If you have done the "developer install" of PmagPy, you can simply navigate to your PmagPy directory.
-
-- Once you have located or moved the data\_files, navigate to the data_files directory on your command line.  Run the command:
-
-    `jupyter notebook`
-
-    + A tab will pop open in your default browser.  Open the `notebooks directory` and then click on the _PmagPy.ipynb notebook.  From there, you will be able to run through all the program examples.
+To actually run those notebooks, you will need to follow [these directions](#running-notebooks).
 
 #### dialogs
 The `dialogs` directory contains GUI components that are used to build the graphical elements of the PmagPy GUIs.
@@ -129,6 +116,42 @@ Here is a visual representation of the directory structure:
 └── uninstall_Mac_OSX.app
 ```
 
+## Running notebooks
+
+- If you have installed PmagPy using pip (standard), you will need to move your data_files to an accessible location.  To do that, you will use the command-line program `move_data_files.py`.
+
+    + You will need to go into your command line to run this program.  You can run it from the directory in which you want to place the PmagPy data_files (perhaps your Desktop), using this command:
+
+    `move_data_files.py -d .` # ("." represents your current directory)
+
+    + Alternatively, you can run it from any directory in your command line using the full destination directory name:
+
+    `move_data_files.py -d ~/Desktop`
+
+    + If you have done the "developer install" of PmagPy, you can simply navigate to your PmagPy directory.
+
+- Once you have located or moved the data\_files, navigate to the data_files directory on your command line.  Run the command:
+
+    `jupyter notebook`
+
+- Click on the `notebooks` directory, then click on the notebook you want to open.  A window will pop up in your default browser with the notebook's contents.  You can then run the notebook cells.
+
+## Git protocols
+
+For an open source project with multiple contributors, it is especially important for changes to be well and clearly documented.  Your reasoning for a certain change may be clear to you, but might need a little extra explanation for someone else.  Here are some basic guidelines to keep in mind.
+
+- Commits should have descriptive names that briefly explain what was done and why.  "Edited file1.py" is a bad commit name!
+
+- If your commit directly fixes [Github issue](https://github.com/PmagPy/PmagPy/issues) 100, it is useful to include "Fixes #100" in the text of the commit.  This syntax both closes the issue and links the issue to the commit for future reference.   However, commit names should always include more detail that just “Fixes #100” - additional context means that the commit message can stand alone.
+
+- Commits should deal with one concern at a time — spanning multiple files is fine, but commits with many unrelated changes are confusing and should be broken up. This makes it easier for someone else to understand what happened, and if something broke in a particular commit it is easier to track it down if the changes are more isolated.
+
+- If you are making a large change that will take multiple commits to implement, it is best to start a feature/fix branch.  Once the feature or fix is done, the changes can be merged into master without breaking core functionality in the meantime.
+
+- Here is a nifty article with some fun [Github keyboard shortcuts](https://help.github.com/articles/using-keyboard-shortcuts/) to let you navigate around Github quickly and easily.
+
+If you are left with any questions about git and Github best practices, go ahead and make a new [Github issue](https://github.com/PmagPy/PmagPy/issues) and we will try to get it worked out!
+
 ## Compile and Release Guide
 
 We try to make new releases of PmagPy several times per year.
@@ -136,37 +159,47 @@ We try to make new releases of PmagPy several times per year.
 A new release includes: updated pip packages (pmagpy & pmagpy-cli), and updated standalone GUIs (for Windows, Mac, and Linux).
 Making a new release has several steps:
 
-1. Make (or update) a release branch.  This allows work to continue on the master branch, while keeping a stable branch for the release.  Once the release is ready, the pip releases and standalones should be released from this branch!
+- Make (or update) a release branch.  This allows work to continue on the master branch, while keeping a stable branch for the release.  Once the release is ready, the pip releases and standalones should be released from this branch!
 
-2. Make sure all tests are passing and all new features are working.
+- Make sure all tests are passing and all new features are working.
 
-3. Create a new release number.  Release numbers are in the form of MAJOR.MINOR.PATCH, and each release number should be higher than the one before it.  More on semantic versioning can be found [here](http://semver.org).  The pip release and the standalones should all use the same release number!
+- Create a new release number.  Release numbers are in the form of MAJOR.MINOR.PATCH, and each release number should be higher than the one before it.  More on semantic versioning can be found [here](http://semver.org).  The pip release and the standalones should all use the same release number!
 
-4. Create a pip release.
+- Create a pip release.
 
-**Note:** To make a pip release, you must have a PyPI account and be added as an Owner or Maintainer of pmagpy and pmagpy-cli.
+    + **Note:** To make a pip release, you must have a PyPI account and be added as an Owner or Maintainer of pmagpy and pmagpy-cli.
 
-These are the steps to make a pip release for pmagpy and pmagpy-cli.
+    + These are the steps to make a pip release for pmagpy and pmagpy-cli.
 
-First, increment the version number in setup.py or command\_line\_setup.py.  PYPI will reject a duplicate version number I forget this step.
+    + This sequence will work for either Python 3 or Python 2.  To make a new pip release for Python 2, you must first switch to the PmagPy Python2 branch, and, of course, make sure you are running Python 2.  However, as we are now developing in Python 3 exclusively, we shouldn't need to make new releases from the Python 2 branch unless there is a new bug fix.
 
-From the PmagPy directory, use the following command to build a new distribution of pmagpy, upload it to PYPI, and upgrade locally:
+    + First, increment the version number in setup.py or command\_line\_setup.py.  PYPI will reject a duplicate version number.
 
-`rm -rf build dist && python setup.py sdist bdist_wheel && twine upload dist/* && pip install pmagpy —upgrade`
+    + If you are using Anaconda Python, downgrade matplotlib to < 2:
 
-To make a test release, use a slightly different command from the PmagPy directory, which will: build a new distribution of pmagpy, upload it to the test site (will not overwrite the version people can download), and upgrade locally:
+     `conda install matplotlib=1.5.3`
 
-`python setup.py sdist bdist_wheel upload -r https://testpypi.python.org/pypi && pip install -i https://testpypi.python.org/pypi pmagpy —upgrade`
+    + From the PmagPy directory, use the following command to build a new distribution of pmagpy, upload it to PYPI, and upgrade locally:
 
-To build pmagpy-cli, you can use the same two commands above, but replacing "setup.py" with "command\_line\_setup.py".
+    `rm -rf build dist && python setup.py bdist_wheel && twine upload dist/*`
 
-A few notes on the whole thing:  first of all, testing the pip install locally doesn't work very well (i.e., `python setup.py install` or `python setup.py test`), because it doesn’t deal correctly with the required data files.  Whenever testing a new pip distribution, it is best to upload to test\_PYPI instead, even though it takes a minute or so to do.  Second, we are using twine for uploading to real PYPI but not to upload to test PYPI.  Using twine is recommended because it transfers the package data in a more secure way, but it doesn't currently work with test_PYPI.
+    + To install that new release:  `pip install pmagpy --upgrade --no-deps`
 
-This article has some more good information about uploading to PYPI, etc.:  https://tom-christie.github.io/articles/pypi/
+    + To make a *test* release, use a slightly different command from the PmagPy directory, which will: build a new distribution of pmagpy, upload it to the test site (will not overwrite the version people can download), and upgrade locally:
 
-5. Create standalone executables.  The process is different for each platform, and details are in the [standalones README](https://github.com/PmagPy/PmagPy/tree/master/setup_scripts).
+    `python setup.py bdist_wheel upload -r https://testpypi.python.org/pypi`
 
-6. If any bug-fixes were made on the release branch during this process, those changes should be merged into master.
+    + To install the test release: `pip install -i https://testpypi.python.org/pypi pmagpy --upgrade --no-deps`
+
+    + To build pmagpy-cli, you can use the same two commands above, but replacing "setup.py" with "command\_line\_setup.py".
+
+    + A few notes on the whole thing:  first of all, testing the pip install locally doesn't work very well (i.e., `python setup.py install` or `python setup.py test`), because it doesn’t deal correctly with the required data files.  Whenever testing a new pip distribution, it is best to upload to test\_PYPI instead, even though it takes a minute or so to do.  Second, we are using twine for uploading to real PYPI but not to upload to test PYPI.  Using twine is recommended because it transfers the package data in a more secure way, but it doesn't currently work with test_PYPI.
+
+    + This article has some more good information about uploading to PYPI, etc.:  https://tom-christie.github.io/articles/pypi/
+
+- Create standalone executables.  The process is different for each platform, and details are in the [standalones README](https://github.com/PmagPy/PmagPy/tree/master/setup_scripts).
+
+- If any bug-fixes were made on the release branch during this process, those changes should be merged into master.
 
 
 ## Resources

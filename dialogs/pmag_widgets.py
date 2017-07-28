@@ -52,22 +52,22 @@ class choose_file(wx.StaticBoxSizer):
 
 class NotEmptyValidator(wx.PyValidator):
     def __init__(self):
-        print "initing validator"
+        print("initing validator")
         wx.PyValidator.__init__(self)
 
     def Clone(self):
         """
         Note that every validator must implement the Clone() method.
         """
-        print "doing Clone"
+        print("doing Clone")
         return NotEmptyValidator()
 
     def Validate(self, win):
-        print "doing Validate"
+        print("doing Validate")
         textCtrl = self.GetWindow()
         text = textCtrl.GetValue()
         if len(text) == 0:
-            print "textCtrl.Name:", textCtrl.Name
+            print("textCtrl.Name:", textCtrl.Name)
             wx.MessageBox("{} must contain some text!".format(str(textCtrl.Name)), "Error")
             textCtrl.SetBackgroundColour("pink")
             textCtrl.SetFocus()
@@ -80,11 +80,11 @@ class NotEmptyValidator(wx.PyValidator):
             return True
 
     def TransferToWindow(self):
-        print "doing TransferToWindow"
+        print("doing TransferToWindow")
         return True
 
     def TransferFromWindow(self):
-        print "doing TransferFromWindow"
+        print("doing TransferFromWindow")
         return True
 
 
@@ -193,8 +193,8 @@ class select_ncn(wx.StaticBoxSizer):
         self.parent = parent
         box = wx.StaticBox(parent, wx.ID_ANY, "")
         super(select_ncn, self).__init__(box, orient=wx.VERTICAL)
-        ncn_values = range(1, 8)
-        self.sample_naming_conventions = dict(zip(ncn_keys, ncn_values))
+        ncn_values = list(range(1, 8))
+        self.sample_naming_conventions = dict(list(zip(ncn_keys, ncn_values)))
         self.select_naming_convention = wx.ComboBox(parent, -1, ncn_keys[0], size=(440, 25), choices=ncn_keys, style=wx.CB_READONLY)
         self.sample_naming_convention_char = wx.TextCtrl(parent, id=-1, size=(40, 25))
         label1 = wx.StaticText(parent, label="sample-site naming convention:", style=wx.TE_CENTER)
@@ -231,8 +231,8 @@ class select_specimen_ocn(wx.StaticBoxSizer):
                     "lab azimuth and dip are same as mag_azimuth, field_dip",
                     "lab azimuth is same as mag_azimuth,lab arrow dip=field_dip-90",
                     "Lab arrow azimuth = mag_azimuth-90; Lab arrow dip = 90-field_dip"]
-        ocn_values = range(1, 6)
-        self.sample_orientation_conventions = dict(zip(ocn_keys, ocn_values))
+        ocn_values = list(range(1, 6))
+        self.sample_orientation_conventions = dict(list(zip(ocn_keys, ocn_values)))
         self.select_orientation_convention = wx.ComboBox(parent, -1, ocn_keys[0], size=(705, 25), choices=ocn_keys, style=wx.CB_READONLY)
         self.Add(label, wx.ALIGN_LEFT)
         self.Add(self.select_orientation_convention, wx.ALIGN_LEFT)
@@ -252,8 +252,8 @@ class select_declination(wx.StaticBoxSizer):
         label2 = wx.StaticText(self.parent, label="if necessary")
         self.dec_box = wx.TextCtrl(self.parent, size=(40, 25))
         declination_keys = ["Use the IGRF DEC value at the lat/long and date supplied", "Use this DEC: ", "DEC=0, mag_az is already corrected in file", "Correct mag_az but not bedding_dip_dir"]
-        declination_values = range(1, 4)
-        self.dcn = dict(zip(declination_keys, declination_values))
+        declination_values = list(range(1, 4))
+        self.dcn = dict(list(zip(declination_keys, declination_values)))
         self.select_dcn = wx.ComboBox(parent, -1, declination_keys[0], size=(405, 25), choices=declination_keys, style=wx.CB_READONLY)
         gridSizer = wx.GridSizer(2, 2, 5, 10)
         gridSizer.AddMany([label1, label2, self.select_dcn, self.dec_box])
@@ -293,6 +293,32 @@ class replicate_measurements(wx.StaticBoxSizer):
             return True
         else:
             return False
+
+
+class mass_or_volume_buttons(wx.StaticBoxSizer):
+
+    def __init__(self, parent):
+        box = wx.StaticBox(parent, wx.ID_ANY, "")
+        super(mass_or_volume_buttons, self).__init__(box, orient=wx.HORIZONTAL)
+        text = "Is the final field mass or volume:"
+        stat_text = wx.StaticText(parent, label=text, style=wx.TE_CENTER)
+        self.rb1 = wx.RadioButton(parent, -1, 'Volume', style=wx.RB_GROUP)
+        self.rb1.SetValue(True)
+        self.rb2 = wx.RadioButton(parent, -1, 'Mass')
+        self.Add(stat_text, wx.ALIGN_LEFT)
+        self.AddSpacer(8)
+        self.Add(self.rb1, wx.ALIGN_LEFT)
+        self.AddSpacer(8)
+        self.Add(self.rb2, wx.ALIGN_LEFT)
+
+    def return_value(self):
+        """
+        return boolean
+        """
+        if self.rb1.GetValue():
+            return 'v'
+        else:
+            return 'm'
 
 
 class check_box(wx.StaticBoxSizer):
@@ -354,7 +380,7 @@ class large_checkbox_window(wx.StaticBoxSizer):
                 values.append(str(sizer.GetWindow().GetValue()))
             else:
                 keys.append(str(sizer.GetWindow().Label))
-        data_dict = dict(zip(keys, values))
+        data_dict = dict(list(zip(keys, values)))
         return [data_dict]
 
 
@@ -428,6 +454,29 @@ class lab_field(wx.StaticBoxSizer):
             return ''
         return labfield
 
+class site_lat_lon(wx.StaticBoxSizer):
+
+    def __init__(self, parent):
+        box = wx.StaticBox(parent, wx.ID_ANY, "", size=(100, 100))
+        super(site_lat_lon, self).__init__(box, orient=wx.VERTICAL)
+        text = "Latitude and Longitude of Site"
+        self.file_info_text = wx.StaticText(parent, label=text, style=wx.TE_CENTER)
+        self.file_info_site_lat = wx.TextCtrl(parent, id=-1, size=(40, 25))
+        self.file_info_site_lon = wx.TextCtrl(parent, id=-1, size=(40, 25))
+        gridbSizer3 = wx.GridSizer(2, 2, 0, 10)
+        gridbSizer3.AddMany([(wx.StaticText(parent, label="Latitude (degrees)", style=wx.TE_CENTER), wx.ALIGN_LEFT),
+                             (wx.StaticText(parent, label="Longitude (degrees)", style=wx.TE_CENTER), wx.ALIGN_LEFT),
+                             (self.file_info_site_lat, wx.ALIGN_LEFT),
+                             (self.file_info_site_lon, wx.ALIGN_LEFT)])
+        self.Add(self.file_info_text, wx.ALIGN_LEFT)
+        self.AddSpacer(8)
+        self.Add(gridbSizer3, wx.ALIGN_LEFT)
+
+    def return_value(self):
+        latlon = "{} {}".format(self.file_info_site_lat.GetValue(), self.file_info_site_lon.GetValue())
+        if latlon.isspace():
+            return ''
+        return latlon
 
 class synthetic(wx.StaticBoxSizer):
     def __init__(self, parent):
@@ -520,16 +569,17 @@ class btn_panel(wx.BoxSizer):
 
 class combine_files(wx.BoxSizer):
 
-    def __init__(self, parent, text):
+    def __init__(self, parent, text, DM=2):
         super(combine_files, self).__init__(wx.VERTICAL)
         self.parent = parent
         self.WD = self.parent.WD
         self.text = text
+        self.DM = DM
 
         bSizer0a = wx.StaticBoxSizer(wx.StaticBox(self.parent.panel, wx.ID_ANY, ""), wx.HORIZONTAL)
         self.add_file_button = wx.Button(self.parent.panel, id=-1, label='add file', name='add')
         self.parent.Bind(wx.EVT_BUTTON, self.on_add_file_button, self.add_file_button)
-        self.add_all_files_button = wx.Button(self.parent.panel, id=-1, label="add all *_" + text + " files", name='add_all')
+        self.add_all_files_button = wx.Button(self.parent.panel, id=-1, label="add all *" + text + " files", name='add_all')
         self.parent.Bind(wx.EVT_BUTTON, self.on_add_all_files_button, self.add_all_files_button)
         bSizer0a.AddSpacer(5)
         bSizer0a.Add(self.add_file_button, wx.ALIGN_LEFT)
@@ -556,7 +606,7 @@ class combine_files(wx.BoxSizer):
             None, message="choose MagIC formatted measurement file",
             defaultDir=self.WD,
             defaultFile="",
-            style=wx.OPEN | wx.CHANGE_DIR
+            style=wx.FD_OPEN | wx.FD_CHANGE_DIR
             )
         if dlg.ShowModal() == wx.ID_OK:
             full_path = dlg.GetPath()
@@ -574,6 +624,10 @@ class combine_files(wx.BoxSizer):
                 if self.text in F:
                     # prevents adding binary files, as well as misc saved stuff
                     if "#" not in F and "~" not in F and not F.endswith('.pyc'):
+                        # ignore er_* files and pmag_* files for DM 3
+                        if (self.DM == 3):
+                            if (F.startswith("er_")) or (F.startswith("pmag_")):
+                                continue
                         # prevent adding files that are already listed
                         if str(F) not in include_files:
                             include_files.append(str(F))
@@ -660,7 +714,7 @@ class HeaderDialog(wx.Dialog):
     As user clicks or double clicks, items are added to or removed from the selection,
     which is displayed in a text control.
     """
-    def __init__(self, parent, label, items1=None, groups=False):
+    def __init__(self, parent, label, items1=None, groups=False, items2=None):
         super(HeaderDialog, self).__init__(parent, title='Choose headers', size=(500, 500))
         if groups:
             word = 'Groups'
@@ -676,6 +730,14 @@ class HeaderDialog(wx.Dialog):
             listbox_sizer.Add(box1, flag=wx.ALL, border=5)
             self.Bind(wx.EVT_LISTBOX, self.on_click, listbox1)
             self.Bind(wx.EVT_LISTBOX_DCLICK, self.on_click, listbox1)
+        if items2:
+            box2 = wx.StaticBoxSizer(wx.StaticBox(self, wx.ID_ANY, "Headers for interpretation data", name='box2'), wx.HORIZONTAL)
+            listbox2 = wx.ListBox(self, wx.ID_ANY, choices=items2, style=wx.LB_MULTIPLE, size=(200, 350))
+            box2.Add(listbox2)
+            listbox_sizer.Add(box2, flag=wx.ALL, border=5)
+            self.Bind(wx.EVT_LISTBOX, self.on_click, listbox2)
+            self.Bind(wx.EVT_LISTBOX_DCLICK, self.on_click, listbox2)
+
 
         text_sizer = wx.StaticBoxSizer(wx.StaticBox(self, wx.ID_ANY, 'Adding {}:'.format(word.lower()), name='text_box'),
                                      wx.HORIZONTAL)
@@ -800,10 +862,7 @@ class MethodCodeDemystifier(wx.StaticBoxSizer):
             vc = vocabulary
         else:
             vc = Vocabulary()
-            vc.get_all_vocabulary()
         self.vc = vc
-        if not any(vc.code_types):
-            vc.get_all_vocabulary()
         types = vc.code_types.index
         types = vc.code_types['label']
         type_ind = vc.code_types.index
@@ -890,7 +949,7 @@ def on_add_dir_button(SELF, text):
     dlg = wx.DirDialog(
         None, message=text,
         defaultPath=os.getcwd(),
-        style=wx.OPEN | wx.DD_DEFAULT_STYLE
+        style=wx.FD_OPEN | wx.DD_DEFAULT_STYLE
     )
     if dlg.ShowModal() == wx.ID_OK:
         SELF.parent.dir_path.SetValue(str(dlg.GetPath()))
@@ -904,13 +963,51 @@ def on_add_file_button(SELF, text):
         None, message=text,
         defaultDir=os.getcwd(),
         defaultFile="",
-        style=wx.OPEN | wx.CHANGE_DIR
+        style=wx.FD_OPEN | wx.FD_CHANGE_DIR
     )
     if dlg.ShowModal() == wx.ID_OK:
         SELF.file_path.SetValue(str(dlg.GetPath()))
     # make sure the frame that called up this dialog ends up in front once the dialog is gone
     # otherwise in Windows the top-level frame ends up in front instead
     SELF.parent.Parent.Raise()
+
+
+
+class UpgradeDialog(wx.Dialog):
+    """"""
+
+    #----------------------------------------------------------------------
+    def __init__(self, parent):
+        """
+        Dialog for MagIC 2 --> MagIC 3 upgrade warning
+        """
+        wx.Dialog.__init__(self, parent, title="Warning")
+
+        msg = """This tool is meant for relatively simple upgrades
+(for instance, a measurement file, a sample file, and a criteria file).
+If you have a more complex contribution to upgrade, and you want maximum accuracy,
+use the upgrade tool at https://www2.earthref.org/MagIC/upgrade.
+
+What do you want to do?"""
+
+        txt = wx.StaticText(self, label=msg)
+        txt_sizer = wx.StaticBoxSizer(wx.VERTICAL, self, "Warning")
+        txt_sizer.Add(txt, flag=wx.ALL|wx.ALIGN_CENTER, border=5)
+
+        btn_boxSizer = wx.BoxSizer(wx.HORIZONTAL)
+        btnOk = wx.Button(self, wx.ID_OK, label="Continue with local upgrade")
+        btnCancel = wx.Button(self, wx.ID_CANCEL, label="Open earthref upgrade tool")
+
+        btnSizer = wx.StdDialogButtonSizer()
+        btnSizer.AddButton(btnOk)
+        btnSizer.AddButton(btnCancel)
+        btnSizer.Realize()
+
+        main_boxSizer = wx.BoxSizer(wx.VERTICAL)
+        main_boxSizer.Add(txt_sizer, flag=wx.ALL|wx.ALIGN_CENTER, border=5)
+        main_boxSizer.Add(btnSizer)
+        self.SetSizer(main_boxSizer)
+        self.Fit()
 
 
 def simple_warning(text=None):
@@ -949,17 +1046,17 @@ def on_helpButton(command=None, text=None):
 
 
 def run_command(SELF, command, outfile):
-    print "-I- Running Python command:\n %s"%command
+    print("-I- Running Python command:\n %s"%command)
     os.system(command)
-    print "-I- Saved results in MagIC format file: {}".format(outfile)
+    print("-I- Saved results in MagIC format file: {}".format(outfile))
 
 
 def run_command_and_close_window(SELF, command, outfile):
-    print "-I- Running Python command:\n %s"%command
+    print("-I- Running Python command:\n %s"%command)
     os.system(command)
     if not outfile:
         outfile = ''
-    msg = "file(s) converted to MagIC format file:\n%s.\n\nSee Terminal (Mac) or command prompt (Windows) for errors"% outfile
+    msg = "file(s) converted to MagIC format file:\n%s.\n\nSee Terminal/message window for errors"% outfile
     dlg = wx.MessageDialog(None, caption="Message:", message=msg, style=wx.OK|wx.ICON_INFORMATION)
     dlg.ShowModal()
     dlg.Destroy()
@@ -967,10 +1064,10 @@ def run_command_and_close_window(SELF, command, outfile):
     SELF.Parent.Raise()
 
 def close_window(SELF, command, outfile):
-    print "-I- Finished running equivalent to Python command:\n %s"%command
+    print("-I- Finished running equivalent to Python command:\n %s"%command)
     if not outfile:
         outfile = ''
-    msg = "file(s) converted to MagIC format file:\n%s.\n\nSee Terminal (Mac) or command prompt (Windows) for errors"% outfile
+    msg = "file(s) converted to MagIC format file:\n%s.\n\nSee Terminal/message window for errors"% outfile
     dlg = wx.MessageDialog(None, caption="Message:", message=msg, style=wx.OK|wx.ICON_INFORMATION)
     dlg.ShowModal()
     dlg.Destroy()
@@ -995,7 +1092,7 @@ def on_hide_output(event):
     outframe.Hide()
 
 def get_output_frame():
-    print '-I- Fetching output frame'
+    print('-I- Fetching output frame')
     wins = wx.GetTopLevelWindows()
     for win in wins:
         if win.Name == 'frame':

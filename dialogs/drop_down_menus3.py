@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
 """
-this module will provide all the functionality for the drop-down controlled vocabulary menus
+provides all the functionality for the drop-down controlled vocabulary menus
+used in MagIC grids
 """
 # pylint: disable=W0612,C0111,C0301
 
 import wx
-from pmagpy.controlled_vocabularies3 import Vocabulary
+from dialogs import magic_grid3
 
 
 class Menus(object):
@@ -18,11 +19,7 @@ class Menus(object):
         take: data_type (string), MagIC contribution,
         & grid (grid object)
         """
-        # if controlled vocabularies haven't already been grabbed from earthref
-        # do so now
         self.contribution = contribution
-        #if not any(vocab.vocabularies):
-        #    vocab.get_all_vocabulary()
 
         self.data_type = data_type
         if self.data_type in self.contribution.tables:
@@ -38,6 +35,7 @@ class Menus(object):
             parent_table, self.parent_type = self.contribution.get_table_name(parent_ind+1)
 
         self.grid = grid
+        self.huge_grid = True if isinstance(self.grid, magic_grid3.HugeMagicGrid) else False
         self.window = grid.Parent  # parent window in which grid resides
         #self.headers = headers
         self.selected_col = None
@@ -51,6 +49,9 @@ class Menus(object):
 
 
     def InitUI(self):
+        """
+        Initialize interface for drop down menu
+        """
         if self.data_type in ['orient', 'ages']:
             belongs_to = []
         else:
@@ -74,11 +75,6 @@ class Menus(object):
                     num = self.grid.col_labels.index(level)
                     self.choices[num] = (level_names, False)
         # Bind left click to drop-down menu popping out
-        # replacing this:
-        #self.window.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK,
-        #lambda event: self.on_left_click(event, self.grid, self.choices),
-        #                 self.grid)
-        # with this:
         self.grid.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK,
                        lambda event: self.on_left_click(event, self.grid, self.choices))
 
@@ -102,9 +98,26 @@ class Menus(object):
         Add a correctly formatted drop-down-menu for given col_label,
         if required or suggested.
         Otherwise do nothing.
+
+        Parameters
+        ----------
+        col_number : int
+                grid position at which to add a drop down menu
+        col_label : str
+                column name
         """
         if col_label.endswith('**') or col_label.endswith('^^'):
             col_label = col_label[:-2]
+        # add drop-down for experiments
+        if col_label == "experiments":
+            if 'measurements' in self.contribution.tables:
+                meas_table = self.contribution.tables['measurements'].df
+                if 'experiment' in meas_table.columns:
+                    exps = meas_table['experiment'].unique()
+                    self.choices[col_number] = (sorted(exps), False)
+                    self.grid.SetColLabelValue(col_number, col_label + "**")
+            return
+        #
         if col_label == 'method_codes':
             self.add_method_drop_down(col_number, col_label)
         elif col_label == 'magic_method_codes':
@@ -112,9 +125,13 @@ class Menus(object):
         elif col_label in ['specimens', 'samples', 'sites', 'locations']:
             if col_label in self.contribution.tables:
                 item_df = self.contribution.tables[col_label].df
-                item_names = item_df[col_label[:-1]].unique()
+                item_names = item_df.index.unique() #[col_label[:-1]].unique()
                 self.choices[col_number] = (sorted(item_names), False)
-
+        elif col_label in ['specimen', 'sample', 'site', 'location']:
+            if col_label + "s" in self.contribution.tables:
+                item_df = self.contribution.tables[col_label + "s"].df
+                item_names = item_df.index.unique() #[col_label[:-1]].unique()
+                self.choices[col_number] = (sorted(item_names), False)
         # add vocabularies
         if col_label in self.contribution.vocab.suggested:
             typ = 'suggested'
@@ -124,7 +141,7 @@ class Menus(object):
             return
 
         # add menu, if not already set
-        if col_number not in self.choices.keys():
+        if col_number not in list(self.choices.keys()):
             if typ == 'suggested':
                 self.grid.SetColLabelValue(col_number, col_label + "^^")
                 controlled_vocabulary = self.contribution.vocab.suggested[col_label]
@@ -145,7 +162,7 @@ class Menus(object):
                 dictionary = {}
                 for item in stripped_list:
                     letter = item[0].upper()
-                    if letter not in dictionary.keys():
+                    if letter not in list(dictionary.keys()):
                         dictionary[letter] = []
                     dictionary[letter].append(item)
                 stripped_list = dictionary
@@ -165,6 +182,16 @@ class Menus(object):
         self.choices[col_number] = (method_list, True)
 
     def on_label_click(self, event):
+        """
+        When a grid column or row label is clicked,
+        provide the appropriate behavior.
+        If there is a drop-down menu, it should pop up
+        for assigning to the entire column.
+        Otherwise user should be able to edit the entire column
+        by entering text.
+        If Menus are attached to a HugeMagicGrid, don't try to do
+        highlighting of a column, it doesn't work.
+        """
         col = event.GetCol()
         color = self.grid.GetCellBackgroundColour(0, col)
         if color != (191, 216, 216, 255): # light blue
@@ -174,15 +201,17 @@ class Menus(object):
             if self.selected_col is not None and self.selected_col != col:
                 col_label_value = self.grid.GetColLabelValue(self.selected_col)
                 self.grid.SetColLabelValue(self.selected_col, col_label_value[:-10])
-                for row in range(self.grid.GetNumberRows()):
-                    self.grid.SetCellBackgroundColour(row, self.selected_col, self.col_color)# 'white'
+                if not self.huge_grid:
+                    for row in range(self.grid.GetNumberRows()):
+                        self.grid.SetCellBackgroundColour(row, self.selected_col, self.col_color)# 'white'
                 self.grid.ForceRefresh()
             # deselect col if user is clicking on it a second time
             if col == self.selected_col:
                 col_label_value = self.grid.GetColLabelValue(col)
                 self.grid.SetColLabelValue(col, col_label_value[:-10])
-                for row in range(self.grid.GetNumberRows()):
-                    self.grid.SetCellBackgroundColour(row, col, self.col_color) # 'white'
+                if not self.huge_grid:
+                    for row in range(self.grid.GetNumberRows()):
+                        self.grid.SetCellBackgroundColour(row, col, self.col_color) # 'white'
                 self.grid.ForceRefresh()
                 self.selected_col = None
             # otherwise, select (highlight) col
@@ -190,34 +219,50 @@ class Menus(object):
                 self.selected_col = col
                 col_label_value = self.grid.GetColLabelValue(col)
                 self.grid.SetColLabelValue(col, col_label_value + " \nEDIT ALL")
-                for row in range(self.grid.GetNumberRows()):
-                    self.grid.SetCellBackgroundColour(row, col, 'light blue')
+                if not self.huge_grid:
+                    for row in range(self.grid.GetNumberRows()):
+                        self.grid.SetCellBackgroundColour(row, col, 'light blue')
                 self.grid.ForceRefresh()
         has_dropdown = False
-        if col in self.choices.keys():
+        if col in list(self.choices.keys()):
             has_dropdown = True
 
         # if the column has no drop-down list, allow user to edit all cells in the column through text entry
         if not has_dropdown and col != 0:
             if self.selected_col == col:
+                col_label = self.grid.GetColLabelValue(col)
+                if col_label.endswith(" \nEDIT ALL"):
+                    col_label = col_label[:-10]
                 default_value = self.grid.GetCellValue(0, col)
                 data = None
-                dialog = wx.TextEntryDialog(None, "Enter value for all cells in the column\nNote: this will overwrite any existing cell values", "Edit All", default_value, style=wx.OK|wx.CANCEL)
+                dialog = wx.TextEntryDialog(None, "Enter value for all cells in the column {}\nNote: this will overwrite any existing cell values".format(col_label_value), "Edit All", default_value, style=wx.OK|wx.CANCEL)
                 dialog.Centre()
                 if dialog.ShowModal() == wx.ID_OK:
                     data = dialog.GetValue()
-                    for row in range(self.grid.GetNumberRows()):
-                        self.grid.SetCellValue(row, col, str(data))
+                    # with HugeMagicGrid, you can add a new value to a column
+                    # all at once
+                    if self.huge_grid:
+                        self.grid.SetColumnValues(col, str(data))
                         if self.grid.changes:
-                            self.grid.changes.add(row)
+                            self.grid.changes.add(0)
                         else:
-                            self.grid.changes = {row}
+                            self.grid.changes = {0}
+                    # with MagicGrid, you must add a new value
+                    # one row at a time
+                    else:
+                        for row in range(self.grid.GetNumberRows()):
+                            self.grid.SetCellValue(row, col, str(data))
+                            if self.grid.changes:
+                                self.grid.changes.add(row)
+                            else:
+                                self.grid.changes = {row}
                 dialog.Destroy()
                 # then deselect column
                 col_label_value = self.grid.GetColLabelValue(col)
                 self.grid.SetColLabelValue(col, col_label_value[:-10])
-                for row in range(self.grid.GetNumberRows()):
-                    self.grid.SetCellBackgroundColour(row, col, self.col_color) # 'white'
+                if not self.huge_grid:
+                    for row in range(self.grid.GetNumberRows()):
+                        self.grid.SetCellBackgroundColour(row, col, self.col_color) # 'white'
                 self.grid.ForceRefresh()
                 self.selected_col = None
 
@@ -254,6 +299,13 @@ class Menus(object):
                 # update the contribution with new name
                 self.contribution.rename_item(self.grid.name,
                                               default_val, new_val)
+                # don't propagate changes if we are just assigning a new name
+                # and not really renaming
+                # (i.e., if a blank row was added then named)
+                if default_val == '':
+                    self.grid.SetCellValue(row, 0, new_val)
+                    return
+
                 # update the current grid with new name
                 for row in range(self.grid.GetNumberRows()):
                     cell_value = self.grid.GetCellValue(row, 0)
@@ -265,7 +317,7 @@ class Menus(object):
         color = self.grid.GetCellBackgroundColour(event.GetRow(), event.GetCol())
         # allow user to cherry-pick cells for editing.
         # gets selection of meta key for mac, ctrl key for pc
-        if event.CmdDown():
+        if event.ControlDown() or event.MetaDown():
             row, col = event.GetRow(), event.GetCol()
             if (row, col) not in self.dispersed_selection:
                 self.dispersed_selection.append((row, col))
@@ -284,9 +336,9 @@ class Menus(object):
                 return
             else:
                 if row > previous_row:
-                    row_range = range(previous_row, row+1)
+                    row_range = list(range(previous_row, row+1))
                 else:
-                    row_range = range(row, previous_row+1)
+                    row_range = list(range(row, previous_row+1))
             for r in row_range:
                 self.grid.SetCellBackgroundColour(r, col, 'light blue')
                 self.selection.append((r, col))
@@ -311,7 +363,7 @@ class Menus(object):
 
         self.grid.SetGridCursor(row, col)
 
-        if col in choices.keys(): # column should have a pop-up menu
+        if col in list(choices.keys()): # column should have a pop-up menu
             menu = wx.Menu()
             two_tiered = choices[col][1]
             choices = choices[col][0]
@@ -345,6 +397,9 @@ class Menus(object):
 
 
     def show_menu(self, event, menu):
+        """
+        Show drop-down menu
+        """
         position = event.GetPosition()
         horizontal, vertical = position
         grid_horizontal, grid_vertical = self.grid.GetSize()
@@ -355,6 +410,15 @@ class Menus(object):
         menu.Destroy()
 
     def update_drop_down_menu(self, grid, choices):
+        """
+        Update drop-down-menus with a new dict of options
+
+        Parameters
+        ----------
+        grid : magic_grid3.MagicGrid
+        choices : list or dict
+            in format: {column_number: ([value1, value2, ...], two_tiered), ... }
+        """
         self.window.Bind(wx.grid.EVT_GRID_CELL_LEFT_CLICK, lambda event: self.on_left_click(event, grid, choices), grid)
         self.choices = choices
 

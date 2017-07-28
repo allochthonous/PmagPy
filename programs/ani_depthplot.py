@@ -1,4 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env pythonw
+from __future__ import print_function
+from builtins import str
 import wx
 import os
 import sys
@@ -14,7 +16,7 @@ import dialogs.pmag_menu_dialogs as pmag_menu_dialogs
 
 def main():
     """
-    NAME 
+    NAME
         ani_depthplot.py
 
     DESCRIPTION
@@ -22,15 +24,18 @@ def main():
 
     SYNTAX
         ani_depthplot.py [command line optins]
+        # or, for Anaconda users:
+        ani_depthplot_anaconda [command line options]
+
 
     OPTIONS
         -h prints help message and quits
         -f FILE: specify input rmag_anisotropy format file from magic
         -fb FILE: specify input magic_measurements format file from magic
-        -fsa FILE: specify input er_samples format file from magic 
+        -fsa FILE: specify input er_samples format file from magic
         -fsum FILE : specify input LIMS database (IODP) core summary csv file
                 to print the core names, set lab to 1
-        -fa FILE: specify input er_ages format file from magic 
+        -fa FILE: specify input er_ages format file from magic
         -d min max [in m] depth range to plot
         -ds [mcd,mbsf], specify depth scale, default is mbsf
         -sav save plot without review
@@ -44,7 +49,7 @@ def main():
 
     args = sys.argv
     if '-h' in args:
-        print main.__doc__
+        print(main.__doc__)
         sys.exit()
     dataframe = extractor.command_line_dataframe([['f', False, 'rmag_anisotropy.txt'],
                                                   ['fb', False, 'magic_measurements.txt'],
@@ -62,8 +67,8 @@ def main():
         dmin, dmax = depth.split()
         dmin, dmax = float(dmin), float(dmax)
     except:
-        print 'you must provide depth in this format: -d dmin dmax'
-        print 'could not parse "{}", defaulting to plotting all depths'.format('-d ' + str(depth))
+        print('you must provide depth in this format: -d dmin dmax')
+        print('could not parse "{}", defaulting to plotting all depths'.format('-d ' + str(depth)))
         dmin, dmax = -1, -1
 
     if depth_scale:
@@ -74,18 +79,18 @@ def main():
         elif 'mcd' in depth_scale:
             depth_scale = 'sample_composite_depth'
         else:
-            print 'Warning: Unrecognized option "{}" provided for depth scale.\nOptions for depth scale are mbsf -- meters below sea floor -- or mcd -- meters composite depth.\nAlternatively, if you provide an age file the depth scale will be automatically set to plot by age instead.\nUsing default "mbsf"'.format(depth_scale)
+            print('Warning: Unrecognized option "{}" provided for depth scale.\nOptions for depth scale are mbsf -- meters below sea floor -- or mcd -- meters composite depth.\nAlternatively, if you provide an age file the depth scale will be automatically set to plot by age instead.\nUsing default "mbsf"'.format(depth_scale))
             depth_scale = 'sample_composite_depth'
-            
+
     fig, figname = ipmag.aniso_depthplot(ani_file, meas_file, samp_file, age_file, sum_file, fmt, dmin, dmax, depth_scale, dir_path)
     if save_quietly:
         if dir_path == '.':
             dir_path = os.getcwd()
         plt.savefig(figname)
         plt.clf()
-        print 'Saved file: {} in folder: {}'.format(figname, dir_path)
+        print('Saved file: {} in folder: {}'.format(figname, dir_path))
         return False
-    
+
     app = wx.App(redirect=False)
     if not fig:
         pw.simple_warning('No plot was able to be created with the data you provided.\nMake sure you have given all the required information and try again')

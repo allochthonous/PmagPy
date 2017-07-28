@@ -4,7 +4,7 @@ doc string
 """
 
 # pylint: disable=C0103,E402
-print '-I- Importing MagIC GUI dependencies'
+print('-I- Importing MagIC GUI dependencies')
 import matplotlib
 if not matplotlib.get_backend() == 'WXAgg':
     matplotlib.use('WXAgg')
@@ -30,22 +30,23 @@ class MainFrame(wx.Frame):
     MagIC GUI
     """
 
-    def __init__(self, WD=None, name='Main Frame', dmodel=None):
+    def __init__(self, WD=None, name='Main Frame', dmodel=None, title=None, contribution=None):
         try:
             version = pmag.get_version()
         except:
             version = ""
-        title = "MagIC GUI   version: %s" % version
-        if sys.platform in ['win32', 'win64']:
-            title += "  Powered by Enthought Canopy"
+        if not title:
+            title = "MagIC GUI   version: %s" % version
+        #if sys.platform in ['win32', 'win64']:
+        #    title += "  Powered by Enthought Canopy"
         wx.Frame.__init__(self, None, wx.ID_ANY, title, name=name)
         #
         self.grid_frame = None
         self.panel = wx.Panel(self, size=wx.GetDisplaySize(), name='main panel')
-        print '-I- Fetching working directory'
+        print('-I- Fetching working directory')
         self.WD = os.path.realpath(WD) or os.getcwd()
 
-        print '-I- Initializing magic data model'
+        print('-I- Initializing magic data model')
         if dmodel is None:
             dmodel = data_model3.DataModel()
         self.data_model = dmodel
@@ -53,17 +54,38 @@ class MainFrame(wx.Frame):
         self.edited = False
         self.validation_mode = False
 
-        print '-I- Initializing interface'
+        print('-I- Initializing interface')
         self.InitUI()
 
-        print '-I- Completed interface'
-        wx.CallAfter(self.get_wd_data)
+        print('-I- Completed interface')
+        if contribution:
+            self.contribution = contribution
+        elif not WD:
+            wx.CallAfter(self.on_change_dir_button)
+        else:
+            wx.CallAfter(self.get_wd_data)
 
     def get_wd_data(self):
+        self.edited = False
+        self.validation_mode = False
+        self.reset_highlights()
+
         wait = wx.BusyInfo('Reading in data from current working directory, please wait...')
         wx.Yield()
-        print '-I- Read in any available data from working directory'
+        print('-I- Read in any available data from working directory')
         self.contribution = nb.Contribution(self.WD, dmodel=self.data_model)
+        # propagate names from measurements into other tables
+        if "measurements" in self.contribution.tables:
+            self.contribution.propagate_measurement_info()
+        # propagate names from any table into other tables
+        # (i.e., site name from samples)
+        self.contribution.propagate_all_tables_info()
+        # extract average lats/lons from sites table
+        self.contribution.get_min_max_lat_lon()
+        # extract age info from ages table and put into other tables
+        self.contribution.propagate_ages()
+        # finish up
+        self.edited = False
         del wait
 
 
@@ -137,12 +159,12 @@ class MainFrame(wx.Frame):
         self.btn5.InitColours()
         self.Bind(wx.EVT_BUTTON, self.make_grid_frame, self.btn5)
 
-        #text = "6. add results data"
-        #self.btn6 = buttons.GenButton(self.panel, id=-1, label=text,
-        #                              size=(300, 50), name='result_btn')
-        #self.btn6.SetBackgroundColour("#C4DF9B")
-        #self.btn6.InitColours()
-        #self.Bind(wx.EVT_BUTTON, self.make_grid_frame, self.btn6)
+        text = "6. add measurements data"
+        self.btn6 = buttons.GenButton(self.panel, id=-1, label=text,
+                                      size=(300, 50), name='measurements_btn')
+        self.btn6.SetBackgroundColour("#C4DF9B")
+        self.btn6.InitColours()
+        self.Bind(wx.EVT_BUTTON, self.make_grid_frame, self.btn6)
 
         bsizer1a = wx.BoxSizer(wx.VERTICAL)
         bsizer1a.AddSpacer(20)
@@ -162,13 +184,13 @@ class MainFrame(wx.Frame):
         #__init__(self, parent, id, label, pos, size, style, validator, name
         bsizer1b.Add(self.btn4, flag=wx.ALIGN_CENTER|wx.BOTTOM, border=20)
         bsizer1b.Add(self.btn5, 0, flag=wx.ALIGN_CENTER|wx.BOTTOM, border=20)
-        #bsizer1b.Add(self.btn6, 0, wx.ALIGN_CENTER, 0)
+        bsizer1b.Add(self.btn6, 0, wx.ALIGN_CENTER, 0)
         bSizer1.Add(bsizer1b, 0, wx.ALIGN_CENTER, 0)
         bSizer1.AddSpacer(20)
 
         #---sizer 2 ----
 
-        bSizer2 = wx.StaticBoxSizer(wx.StaticBox(self.panel, wx.ID_ANY, "Upload to MagIC database", name='bSizer2'), wx.HORIZONTAL)
+        self.bSizer2 = wx.StaticBoxSizer(wx.StaticBox(self.panel, wx.ID_ANY, "Create file for upload to MagIC database", name='bSizer2'), wx.HORIZONTAL)
 
         text = "prepare upload txt file"
         self.btn_upload = buttons.GenButton(self.panel, id=-1, label=text,
@@ -177,9 +199,9 @@ class MainFrame(wx.Frame):
         self.btn_upload.InitColours()
         self.Bind(wx.EVT_BUTTON, self.on_upload_file, self.btn_upload)
 
-        bSizer2.AddSpacer(20)
-        bSizer2.Add(self.btn_upload, 0, wx.ALIGN_CENTER, 0)
-        bSizer2.AddSpacer(20)
+        self.bSizer2.AddSpacer(20)
+        self.bSizer2.Add(self.btn_upload, 0, wx.ALIGN_CENTER, 0)
+        self.bSizer2.AddSpacer(20)
         #self.Bind(wx.EVT_BUTTON, self.on_btn_upload, self.btn_upload)
 
 
@@ -200,7 +222,7 @@ class MainFrame(wx.Frame):
         vbox.AddSpacer(10)
         vbox.AddSpacer(10)
         self.hbox.AddSpacer(10)
-        vbox.Add(bSizer2, 0, wx.ALIGN_CENTER, 0)
+        vbox.Add(self.bSizer2, 0, wx.ALIGN_CENTER, 0)
         vbox.AddSpacer(10)
 
         self.hbox.Add(vbox, 0, wx.ALIGN_CENTER, 0)
@@ -210,12 +232,12 @@ class MainFrame(wx.Frame):
         self.hbox.Fit(self)
 
         # do menu
-        print "-I- Initializing menu"
+        print("-I- Initializing menu")
         menubar = MagICMenu(self)
         self.SetMenuBar(menubar)
 
 
-    def on_change_dir_button(self, event):
+    def on_change_dir_button(self, event=None):
         """
         create change directory frame
         """
@@ -231,24 +253,17 @@ class MainFrame(wx.Frame):
             self.WD = change_dir_dialog.GetPath()
             self.dir_path.SetValue(self.WD)
         change_dir_dialog.Destroy()
-        wait = wx.BusyInfo('Initializing data object in new directory, please wait...')
-        wx.Yield()
-        print '-I- Initializing magic data object'
-        # make new contribution object, but reuse old data_model
-        self.contribution = nb.Contribution(self.WD, dmodel=self.data_model)
-        self.edited = False
-        print '-I- Read in any available data from working directory'
-        print '-I- Initializing headers'
-        del wait
+        self.get_wd_data()
 
     def on_open_grid_frame(self):
         self.Hide()
 
     def on_close_grid_frame(self, event=None):
-        if self.grid_frame.grid.changes:
+        if self.grid_frame!=None and self.grid_frame.grid.changes:
             self.edited = True
         self.grid_frame = None
-        self.Show()
+        try: self.Show()
+        except RuntimeError: pass
         if event:
             event.Skip()
 
@@ -257,7 +272,7 @@ class MainFrame(wx.Frame):
         Create a GridFrame for data type of the button that was clicked
         """
         if self.grid_frame:
-            print '-I- You already have a grid frame open'
+            print('-I- You already have a grid frame open')
             pw.simple_warning("You already have a grid open")
             return
 
@@ -267,14 +282,41 @@ class MainFrame(wx.Frame):
             grid_type = self.FindWindowById(event.Id).Name[:-4] # remove ('_btn')
         wait = wx.BusyInfo('Making {} grid, please wait...'.format(grid_type))
         wx.Yield()
+        # propagate site lat/lon info into locations if necessary
+        if grid_type == 'locations' and 'sites' in self.contribution.tables:
+            self.contribution.get_min_max_lat_lon()
+            self.contribution.propagate_cols_up(['lithologies',
+                                                 'geologic_classes'],
+                                                'locations', 'sites')
+        # propagate lithologies/type/class information from sites to samples/specimens
+        if grid_type in ['specimens', 'samples']:
+            self.contribution.propagate_lithology_cols()
+        # propagate average lat/lon info from samples table if
+        # available in samples and missing in sites
+        if grid_type == 'sites':
+            self.contribution.propagate_average_up(cols=['lat', 'lon', 'height'],
+                                           target_df_name='sites',
+                                           source_df_name='samples')
+            self.contribution.propagate_lithology_cols()
         # hide mainframe
         self.on_open_grid_frame()
+        # choose appropriate size for grid
+        if grid_type == 'measurements':
+            huge = True
+        else:
+            huge = False
         # make grid frame
-        self.grid_frame = grid_frame.GridFrame(self.contribution, self.WD, grid_type, grid_type, self.panel)
+        self.grid_frame = grid_frame.GridFrame(self.contribution, self.WD,
+                                               grid_type, grid_type,
+                                               self.panel, huge=huge)
         row_string = ""
         # paint validations if appropriate
         if self.validation_mode:
             if grid_type in self.validation_mode:
+                if grid_type == 'measurements':
+                    skip_cell_render = True
+                else:
+                    skip_cell_render = False
                 self.grid_frame.toggle_help(None, "open")
                 row_problems = self.failing_items[grid_type]["rows"]
                 missing_columns = self.failing_items[grid_type]["missing_columns"]
@@ -283,10 +325,10 @@ class MainFrame(wx.Frame):
                 #col_nums = range(len(all_cols))
                 #col_pos = dict(zip(all_cols, col_nums))
                 if len(row_problems):
-                    row_string = """Columns and rows with problem data have been highlighted in blue.
-Cells with problem data are highlighted according to the type of problem.
-Red: incorrect data
-For full error messages, see {}.""".format(grid_type + "_errors.txt")
+                    row_string = "Columns and rows with problem data have been highlighted in blue.\n"
+                    if not skip_cell_render:
+                        row_string += "Cells with problem data are highlighted according to the type of problem.\nRed: incorrect data\n"
+                    row_string += "For full error messages, see {}.".format(grid_type + "_errors.txt")
                     for row in row_problems['num']:
                         self.grid_frame.grid.paint_invalid_row(row)
                         mask = row_problems["num"] == row
@@ -295,7 +337,8 @@ For full error messages, see {}.""".format(grid_type + "_errors.txt")
                         for col in cols:
                             pre, col_name = val_up3.extract_col_name(col)
                             col_ind = self.grid_frame.grid.col_labels.index(col_name)
-                            self.grid_frame.grid.paint_invalid_cell(row, col_ind)
+                            self.grid_frame.grid.paint_invalid_cell(row, col_ind,
+                                                                    skip_cell=skip_cell_render)
                 current_label = self.grid_frame.msg_text.GetLabel()
                 if len(missing_columns):
                     col_string = "You are missing the following required columns: {}\n\n".format(", ".join(missing_columns))
@@ -320,13 +363,30 @@ For full error messages, see {}.""".format(grid_type + "_errors.txt")
                                                                                   vocab=self.contribution.vocab)
         self.failing_items = all_failing_items
         if has_problems:
+            self.highlight_problems(has_problems)
+        if not has_problems:
+            self.validation_mode = set()
+            self.message.SetLabel('Validated!')
+            self.bSizer_msg.ShowItems(False)
+            self.hbox.Fit(self)
+            # do alert that your file passed
+            dlg = wx.MessageDialog(self,caption="Message:", message="Your contribution has passed validations!\nGo to https://www.earthref.org/MagIC to upload:\n{}".format(res), style=wx.OK)
+            dlg.ShowModal()
+
+        del wait
+
+    def highlight_problems(self, has_problems):
+        """
+        Outline grid buttons in red if they have validation errors
+        """
+        if has_problems:
             self.validation_mode = set(has_problems)
             # highlighting doesn't work with Windows
             if sys.platform in ['win32', 'win62']:
                 self.message.SetLabel('The following grid(s) have incorrect or incomplete data:\n{}'.format(', '.join(self.validation_mode)))
             # highlighting does work with OSX
             else:
-                for dtype in ["specimens", "samples", "sites", "locations", "ages"]:
+                for dtype in ["specimens", "samples", "sites", "locations", "ages", "measurements"]:
                     wind = self.FindWindowByName(dtype + '_btn')
                     if dtype not in has_problems:
                         wind.Unbind(wx.EVT_PAINT, handler=self.highlight_button)
@@ -335,13 +395,25 @@ For full error messages, see {}.""".format(grid_type + "_errors.txt")
                 self.Refresh()
                 self.message.SetLabel('Highlighted grids have incorrect or incomplete data')
             self.bSizer_msg.ShowItems(True)
+            # manually fire a paint event to make sure all buttons
+            # are highlighted/unhighlighted appropriately
+            paintEvent = wx.CommandEvent(wx.wxEVT_PAINT,
+                                         self.GetId())
+            self.GetEventHandler().ProcessEvent(paintEvent)
+
             self.hbox.Fit(self)
-        if not has_problems:
-            self.validation_mode = set()
-            self.message.SetLabel('')
-            self.bSizer_msg.ShowItems(False)
-            self.hbox.Fit(self)
-        del wait
+
+    def reset_highlights(self):
+        """
+        Remove red outlines from all buttons
+        """
+        for dtype in ["specimens", "samples", "sites", "locations", "ages"]:
+            wind = self.FindWindowByName(dtype + '_btn')
+            wind.Unbind(wx.EVT_PAINT, handler=self.highlight_button)
+        self.Refresh()
+        #self.message.SetLabel('Highlighted grids have incorrect or incomplete data')
+        self.bSizer_msg.ShowItems(False)
+        self.hbox.Fit(self)
 
 
     def highlight_button(self, event):
@@ -426,7 +498,7 @@ class MagICMenu(wx.MenuBar):
         dia = pmag_menu_dialogs.ClearWD(self.parent, self.parent.WD)
         clear = dia.do_clear()
         if clear:
-            print '-I- Clear data object'
+            print('-I- Clear data object')
             self.contribution = nb.Contribution(self.WD, dmodel=self.data_model)
             self.edited = False
 
@@ -463,21 +535,32 @@ class MagICMenu(wx.MenuBar):
 
 def main():
     if '-h' in sys.argv:
-        print "See https://earthref.org/PmagPy/cookbook/#magic_gui.py for a complete tutorial"
+        help_msg = """
+MagIC GUI is for creating and uploading contributions to the MagIC database.
+Note: if you are starting with a measurement file, it is better to use
+Pmag GUI instead.
+MagIC GUI is mainly meant for contributions with specimen-level data and higher.
+
+SYNTAX
+    magic_gui.py [command line options]
+    # or, for Anaconda users:
+    magic_gui_anaconda [command line options]
+
+INFORMATION
+    See https://earthref.org/PmagPy/cookbook/#magic_gui.py for a complete tutorial
+"""
+        print(help_msg)
         sys.exit()
-    print '-I- Starting MagIC GUI - please be patient'
+    print('-I- Starting MagIC GUI - please be patient')
 
     # if redirect is true, wxpython makes its own output window for stdout/stderr
-    app = wx.App(redirect=True)
+    if 'darwin' in sys.platform:
+        app = wx.App(redirect=False)
+    else:
+        app = wx.App(redirect=True)
 
-    working_dir = pmag.get_named_arg_from_sys('-WD', '.')
+    working_dir = pmag.get_named_arg_from_sys('-WD', '')
     app.frame = MainFrame(working_dir)
-    ## this causes an error with Canopy Python
-    ## (it works with brew Python)
-    ## need to use these lines for Py2app
-    if working_dir == '.':
-        app.frame.on_change_dir_button(None)
-
     app.frame.Show()
     app.frame.Center()
     ## use for debugging:

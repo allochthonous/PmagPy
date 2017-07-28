@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+from builtins import zip
+from builtins import str
+from builtins import range
 import numpy as np
 import os
 
@@ -84,7 +88,6 @@ def isIn(row, col_name, arg, dm, df, con=None):
     If not, return error message.
     """
     #grade = df.apply(func, args=(validation_name, arg, dm), axis=1)
-    x = 0
     cell_value = row[col_name]
     if not cell_value:
         return None
@@ -101,8 +104,14 @@ def isIn(row, col_name, arg, dm, df, con=None):
         possible_values = con.tables[table_name].df[table_col_name].unique()
         for value in cell_values:
             if value not in possible_values:
-                return 'This value: "{}" is not found in: {}'.format(value, arg)
-                break
+                trunc_possible_values = [val.replace(' ', '') for val in possible_values if val]
+                trunc_cell_value = cell_value.replace(' ', '')
+                if trunc_cell_value not in trunc_possible_values:
+                    if trunc_cell_value != value:
+                        return 'This value (long): "{}" is not found in: {} column in {} table.  Also (short): {} is not in {}'.format(value, table_col_name, table_name, trunc_cell_value, arg)
+                    else:
+                        return 'This value: "{}" is not found in: {} column in {} table'.format(value, table_col_name, table_name)
+                    break
     # if it's in the present table:
     else:
         possible_values = df[arg].unique()
@@ -151,7 +160,10 @@ def checkMin(row, col_name, arg, *args):
     try:
         arg_val = float(arg)
     except ValueError:
-        arg_val = row[arg]
+        if arg in row.index:
+            arg_val = row[arg]
+        else:
+            return None
     try:
         if float(cell_value) >= float(arg_val):
             return None
@@ -173,8 +185,18 @@ def cv(row, col_name, arg, current_data_model, df, con):
         return None
     cell_values = cell_value.split(":")
     cell_values = [c.strip() for c in cell_values]
+    # get possible values for controlled vocabulary
+    # exclude weird unicode
+    possible_values = []
+    for val in vocabulary[col_name]:
+        try:
+            possible_values.append(str(val).lower())
+        except UnicodeEncodeError as ex:
+            print(val, ex)
     for value in cell_values:
-        if value.lower() in [v.lower() for v in vocabulary[col_name]]:
+        if str(value).lower() == "nan":
+            continue
+        elif str(value).lower() in possible_values:
             continue
         elif value.lower() == "none":
             continue
@@ -216,10 +238,7 @@ def test_type(value, value_type):
     if not value:
         return None
     if value_type == "String":
-        if str(value) == value:
-            return None
-        else:
-            return "should be string"
+        return None
     elif value_type == "Number":
         try:
             float(value)
@@ -227,13 +246,12 @@ def test_type(value, value_type):
         except ValueError:
             return '"{}" should be a number'.format(str(value))
     elif value_type == "Integer":
+        try:
+            int(value)
+        except ValueError:
+            return '"{}" should be an integer'.format(str(value))
         if isinstance(value, str):
             if str(int(value)) == value:
-                return None
-            else:
-                return '"{}" should be an integer'.format(str(value))
-        else:
-            if int(value) == value:
                 return None
             else:
                 return '"{}" should be an integer'.format(str(value))
@@ -289,7 +307,7 @@ def validate_df(df, dm, con=None):
                     grade = df.apply(func, args=(validation_name, arg, dm, df, con), axis=1)
                     col_name = "value_pass_" + validation_name + "_" + func.__name__
                     if col_name in df.columns:
-                        num_range = range(1, 10)
+                        num_range = list(range(1, 10))
                         for num in num_range:
                             if (col_name + str(num)) in df.columns:
                                 continue
@@ -306,7 +324,7 @@ def validate_df(df, dm, con=None):
                 else:
                     required_one[arg].append(missing)
         # format the group validation columns
-        for key, value in required_one.items():
+        for key, value in list(required_one.items()):
             if None in value:
                 # this means at least one value from the required group is present,
                 # so the validation passes
@@ -364,15 +382,15 @@ def print_row_failures(failing_items, verbose=False, outfile_name=None):
         string = "{:10}  |  row number: {}".format(ind, str(row["num"]))
         first_string = "\t".join([str(ind), str(row["num"])])
         if verbose:
-            print first_string
+            print(first_string)
         #if outfile:
         #    ofile.write("{}\n".format(string))
-        for key, issue in issues.items():
+        for key, issue in list(issues.items()):
             issue_type, issue_col = extract_col_name(key)
             string = "{:10}  |  {:10}  |  {}".format(issue_type, issue_col, issue)
             string = "\t".join([issue_type, issue_col, issue])
             if verbose:
-                print string
+                print(string)
             if outfile:
                 outfile.write(first_string + "\t" + string + "\n")
     if outfile:
@@ -389,7 +407,7 @@ def get_row_failures(df, value_cols, type_cols, verbose=False, outfile=None):
     for that row.
     """
     # set temporary numeric index
-    df["num"] = range(len(df))
+    df["num"] = list(range(len(df)))
     # get column names for value & type validations
     names = value_cols.union(type_cols)
     # drop all non validation columns
@@ -398,7 +416,7 @@ def get_row_failures(df, value_cols, type_cols, verbose=False, outfile=None):
     failing_items = value_problems.dropna(how="all", subset=names)
     if not len(failing_items):
         if verbose:
-            print "No problems"
+            print("No problems")
         return []
     failing_items = failing_items.dropna(how="all", axis=1)
     # get names of the failing items
@@ -419,7 +437,7 @@ def get_bad_rows_and_cols(df, validation_names, type_col_names,
     Output: list of rows with bad values, list of columns with bad values,
     list of missing (but required) columns.
     """
-    df["num"] = range(len(df))
+    df["num"] = list(range(len(df)))
     problems = df[validation_names.union(["num"])]
     all_problems = problems.dropna(how='all', axis=0, subset=validation_names)
     value_problems = problems.dropna(how='all', axis=0, subset=type_col_names.union(value_col_names))
@@ -445,32 +463,32 @@ def get_bad_rows_and_cols(df, validation_names, type_col_names,
             missing_cols.append(stripped_col)
             long_missing_cols.append(col)
     if len(value_problems):
-        bad_rows = zip(list(value_problems["num"]), list(value_problems.index))
+        bad_rows = list(zip(list(value_problems["num"]), list(value_problems.index)))
     else:
         bad_rows = []
     if verbose:
         if bad_rows:
             formatted_rows = ["row: {}, name: {}".format(row[0], row[1]) for row in bad_rows]
-            if len(bad_rows) > 20:
-                print "-W- these rows have problems:\n", "\n".join(formatted_rows[:20]), " ..."
-                print "(for full error output see error file)"
+            if len(bad_rows) > 5:
+                print("-W- these rows have problems:\n", "\n".join(formatted_rows[:5]), " ...")
+                print("(for full error output see error file)")
             else:
-                print "-W- these rows have problems:", "\n".join(formatted_rows)
+                print("-W- these rows have problems:", "\n".join(formatted_rows))
         if problem_cols:
-            print "-W- these columns contain bad values:", ", ".join(set(problem_cols))
+            print("-W- these columns contain bad values:", ", ".join(set(problem_cols)))
         if missing_cols:
-            print "-W- these required columns are missing:", ", ".join(missing_cols)
+            print("-W- these required columns are missing:", ", ".join(missing_cols))
     return bad_rows, problem_cols, missing_cols
 
 
 # Run through all validations for a single table
 
-def validate_table(the_con, dtype, verbose=False):
+def validate_table(the_con, dtype, verbose=False, output_dir="."):
     """
     Return name of bad table, or False if no errors found.
     Calls validate_df then parses its output.
     """
-    print "-I- Validating {}".format(dtype)
+    print("-I- Validating {}".format(dtype))
     # grab dataframe
     current_df = the_con.tables[dtype].df
     # grab data model
@@ -480,7 +498,7 @@ def validate_table(the_con, dtype, verbose=False):
     # get names of the added columns
     value_col_names, present_col_names, type_col_names, missing_groups, validation_col_names = get_validation_col_names(current_df)
     # print out failure messages
-    ofile = os.path.join(os.getcwd(), "{}_errors.txt".format(dtype))
+    ofile = os.path.join(output_dir, "{}_errors.txt".format(dtype))
     failing_items = get_row_failures(current_df, value_col_names,
                                      type_col_names, verbose, outfile=ofile)
     bad_rows, bad_cols, missing_cols = get_bad_rows_and_cols(current_df, validation_col_names,
@@ -490,20 +508,20 @@ def validate_table(the_con, dtype, verbose=False):
     current_df.drop(validation_col_names, axis=1, inplace=True)
     current_df.drop(missing_groups, axis=1, inplace=True)
     if len(failing_items):
-        print "-I- Complete list of row errors can be found in {}".format(ofile)
+        print("-I- Complete list of row errors can be found in {}".format(ofile))
         return dtype, bad_rows, bad_cols, missing_cols, missing_groups, failing_items
     elif len(missing_cols) or len(missing_groups):
-        print "-I- You are missing some required headers"
+        print("-I- You are missing some required headers")
         if len(missing_cols):
-            print "-I- You are missing these required headers: {}".format(", ".join(missing_cols))
+            print("-I- You are missing these required headers: {}".format(", ".join(missing_cols)))
         if len(missing_groups):
             formatted_groups = [group[11:] for group in missing_groups]
-            print '-I- You need at least one header from these groups: {}'.format(", ".join(formatted_groups))
+            print('-I- You need at least one header from these groups: {}'.format(", ".join(formatted_groups)))
         else:
             formatted_groups = []
         return dtype, bad_rows, bad_cols, missing_cols, formatted_groups, failing_items
     else:
-        print "-I- No row errors found!"
+        print("-I- No row errors found!")
         return False
 
 
@@ -514,12 +532,12 @@ def validate_contribution(the_con):
     Go through a Contribution and validate each table
     """
     passing = True
-    for dtype in the_con.tables.keys():
-        print "validating {}".format(dtype)
+    for dtype in list(the_con.tables.keys()):
+        print("validating {}".format(dtype))
         fail = validate_table(the_con, dtype)
         if fail:
             passing = False
-        print '--'
+        print('--')
 
 
 ## Utilities
@@ -575,4 +593,4 @@ def make_row_dict(row):
     ind = row[row.notnull()].index
     values = row[row.notnull()].values
     # to transformation with extract_col_name here???
-    return dict(zip(ind, values))
+    return dict(list(zip(ind, values)))

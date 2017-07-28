@@ -28,7 +28,6 @@ pmagpy/*.png
 new-test-output/*
 
 SPD_consistency_tests/*
-pmag_criteria.txt
 
 *.DS_Store
 SPD_consistency_tests/*
@@ -116,6 +115,7 @@ unittests/examples/my_project/thellier_interpreter/thellier_interpreter_STDEV-OP
 notes_pmagpy/
 notes_pmagpy/*
 
+data_files/aarm_magic/specimens.txt
 data_files/aarm_results.txt
 data_files/aniso_magic/rmag_results.txt
 data_files/arm_anisotropy.txt
@@ -164,6 +164,28 @@ data_files/measurements_normalize/irm_norm_measurements.txt
 data_files/parse_measurements/er_specimens.txt
 data_files/parse_measurements/magic_instruments.txt
 data_files/s_magic/rmag_anisotropy.txt
+data_files/2_5/McMurdo/ages.txt
+data_files/2_5/McMurdo/specimens.txt
+data_files/2_5/McMurdo/samples.txt
+data_files/2_5/McMurdo/sites.txt
+data_files/2_5/McMurdo/locations.txt
+data_files/2_5/McMurdo/McMurdo*.txt
+data_files/2_5/McMurdo/*errors.txt
+data_files/3_0/McMurdo/McMurdo*.txt
+data_files/3_0/McMurdo/*errors.txt
+data_files/3_0/McMurdo/thellier_interpreter
+data_files/3_0/McMurdo/thellier_interpreter/*
+data_files/3_0/sites_only
+data_files/3_0/sites_only/*
+data_files/3_0/Megiddo/Tel*
+data_files/3_0/Megiddo/*errors*.txt
+data_files/Measurement_Import/CIT_magic/PI47/magic_measurements.txt
+data_files/Measurement_Import/CIT_magic/PI47/*.txt
+data_files/Measurement_Import/CIT_magic/*.txt
+data_files/Measurement_Import/generic_magic/er_samples.txt
+data_files/Measurement_Import/generic_magic/magic_measurements.txt
+data_files/Measurement_Import/sio_magic/*.txt
+
 
 pmagpy.egg-info
 pmagpy.egg-info/*
@@ -191,4 +213,12 @@ Location_*/*
 *.bak
 */*.bak
 *new_*.txt
->>>>>>> PmagPy/master
+
+programs/flycheck_demag_gui.py
+.png
+
+pmag_gui_dist/*
+magic_gui_dist/*
+pmag_gui_build/*
+magic_gui_build/*
+

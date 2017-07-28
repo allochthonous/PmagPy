@@ -1,20 +1,45 @@
+from __future__ import print_function
+import sys
+if sys.version_info < (3,):
+    raise Exception("""
+You are running Python {}.
+This version of pmagpy is only compatible with Python 3.
+Make sure you have pip ≥ 9.0 to avoid this kind of issue,
+as well as setuptools ≥ 24.2:
+
+ $ pip install pip setuptools --upgrade
+
+Then you should be able to download the correct version of pmagpy:
+
+ $ pip install pmagpy --upgrade
+
+If this still gives you an error, please report the issue:
+https://github.com/PmagPy/PmagPy/issues
+
+Thanks!
+
+""".format(sys.version))
+
 # Always prefer setuptools over distutils
 from setuptools import setup, find_packages
 # To use a consistent encoding
 from codecs import open
 import os
 from os import path
+from pmagpy import version
 
-version_num = '3.8.4'
+version_num = version.version.strip('pmagpy-')
 packages = find_packages(exclude=['programs', 'pmagpy_tests',
+                                  'programs.conversion_scripts',
+                                  'programs.conversion_scripts2',
                                   #'dialogs',
                                   'pmagpy_tests.examples', 'pmag_env',
                                   'pmagpy_tests.examples.my_project',
                                   'pmagpy_tests.examples.empty_dir',
                                   'pmagpy_tests.examples.my_project_with_errors'])
-print 'packages', packages
+print('packages', packages)
 packages.append('pmag_env')
-print 'packages', packages
+print('packages', packages)
 
 
 
@@ -50,10 +75,11 @@ def do_walk(data_path):
 def parse_dict(dictionary):
     formatted = []
     formatted_dict = {}
-    for key in dictionary.keys():
+    for key in list(dictionary.keys()):
         files = dictionary.pop(key)
         formatted_files = [path.join(key, f) for f in files]
-        ind = key.index('/data_files') + len('/data_files/')
+        #ind = key.index('/data_files') + len('/data_files/')
+        ind = key.index('data_files') + len('data_files/')
         new_key = key[ind:]
         #new_key = os.path.join('pmagpy_data_files', new_key)
         new_key = os.path.join('data_files', new_key)
@@ -62,13 +88,18 @@ def parse_dict(dictionary):
     return formatted, formatted_dict
 
 # get formatted list of data_files for setup()
-data_files = do_walk(path.join(here, 'data_files'))
+#data_files = do_walk(path.join(here, 'data_files'))
+data_files = do_walk('data_files')
 formatted, formatted_dict = parse_dict(data_files)
 
 
 # Get the long description from the README file
-with open(path.join(here, 'README.md'), encoding='utf-8') as f:
-        long_description = f.read()
+#with open(path.join(here, 'README.md'), encoding='utf-8') as f:
+#        long_description = f.read()
+
+with open('README.md', encoding='utf-8') as f:
+    long_description = f.read()
+
 
 setup(
         name='pmagpy',
@@ -109,9 +140,17 @@ setup(
                     'Programming Language :: Python :: 2',
                     'Programming Language :: Python :: 2.6',
                     'Programming Language :: Python :: 2.7',
+                    'Programming Language :: Python :: 3',
+                    'Programming Language :: Python :: 3.5',
+                    'Programming Language :: Python :: 3.6',
+
     ],
 
     keywords='geology paleomagnetism',
+
+    # won't install if user has python 2
+    python_requires='>=3.4',
+
 
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
@@ -143,6 +182,12 @@ setup(
     # If there are data files included in your packages that need to be
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
+    #
+    # removing MANIFEST.in doesn't help
+    # changing this to False breaks data model, etc.
+    # but it prevents this error:
+    ##  setup() arguments must *always* be /-separated paths relative to the
+    ## setup.py directory, *never* absolute paths.
     include_package_data=True,
     #package_data={
     #            'zebra': ['demag_gui.log'],

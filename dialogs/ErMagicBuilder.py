@@ -12,7 +12,7 @@ import wx
 import wx.grid
 import wx.html
 #import pdb
-import pmag_widgets as pw
+from . import pmag_widgets as pw
 from pmagpy import find_pmag_dir
 from pmagpy import builder2 as builder
 from pmagpy import new_builder as nb
@@ -55,6 +55,9 @@ class MagIC_model_builder3(wx.Frame):
 
         # first propagate from measurements
         self.contribution.propagate_measurement_info()
+        # then propagate from other tables
+        # (i.e., if sites are in specimens or samples but not measurements)
+        self.contribution.propagate_all_tables_info()
         # then add in blank tables if any are missing
         self.table_list = ["specimens", "samples", "sites", "locations", "ages"]
         for table in self.table_list:
@@ -286,9 +289,9 @@ class MagIC_model_builder(wx.Frame):
         else:
             self.er_magic= ErMagic_data
 
-        print '-I- Read in any available data from working directory'
+        print('-I- Read in any available data from working directory')
         self.er_magic.get_all_magic_info()
-        print '-I- Initializing headers'
+        print('-I- Initializing headers')
         self.er_magic.init_default_headers()
         self.er_magic.init_actual_headers()
         self.SetTitle("Earth-Ref Magic Builder" )

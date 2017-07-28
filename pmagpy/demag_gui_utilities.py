@@ -1,10 +1,15 @@
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import zip
+from builtins import map
+from builtins import range
 import os
 from wx import FileDialog
 from re import findall,split
 from numpy import array,arange,pi,cos,sin
-from pmag import dimap,cart2dir,dir2cart
+from .pmag import dimap,cart2dir,dir2cart
 
-def specimens_comparator(s1,s2):
+def spec_cmp(s1,s2=''):
     if type(s1) != str and type(s2) != str: return 0
     elif type(s1) != str: return -1
     elif type(s2) != str: return 1
@@ -14,8 +19,8 @@ def specimens_comparator(s1,s2):
         for c1,c2 in zip(e1,e2): #sort by letters
             if c1 != c2 and c1.isalpha() and c2.isalpha():
                 return ord(c1)-ord(c2)
-        l1 = map(int, findall('\d+', e1)) #retrieves numbers from names
-        l2 = map(int, findall('\d+', e2))
+        l1 = list(map(int, findall('\d+', e1))) #retrieves numbers from names
+        l2 = list(map(int, findall('\d+', e2)))
         for i1,i2 in zip(l1,l2): #sort by numbers
             if i1-i2 != 0:
                 return i1-i2
@@ -26,18 +31,40 @@ def meas_cmp(m1,m2):
     elif not isinstance(m1,dict): return -1
     elif not isinstance(m2,dict): return 1
     spec_key,num_key,meth_key = 'er_specimen_name','measurement_number','magic_method_codes'
-    if spec_key in m1.keys() and spec_key in m2.keys():
+    if spec_key in list(m1.keys()) and spec_key in list(m2.keys()):
         if m1[spec_key] > m2[spec_key]: return 1
         elif m1[spec_key] < m2[spec_key]: return -1
-    if num_key in m1.keys() and num_key in m2.keys():
+    if num_key in list(m1.keys()) and num_key in list(m2.keys()):
         try: return int(m1[num_key]) - int(m2[num_key])
         except ValueError: print("measurement number sorting impossible as some measurement indecies are not numbers")
-    if meth_key in m1.keys() and meth_key in m2.keys():
+    if meth_key in list(m1.keys()) and meth_key in list(m2.keys()):
         m1_meths,m2_meths = m1[meth_key].split(':'),m2[meth_key].split(':')
         if 'LT-NO' in m1_meths and 'LT-NO' in m2_meths: return 0
         elif 'LT-NO' in m1_meths: return -1
         elif 'LT-NO' in m2_meths: return 1
     return 0
+
+def cmp_to_key(mycmp):
+    'Convert a cmp= function into a key= function'
+    class K(object):
+        def __init__(self, obj, *args):
+            self.obj = obj
+        def __lt__(self, other):
+            return mycmp(self.obj, other.obj) < 0
+        def __gt__(self, other):
+            return mycmp(self.obj, other.obj) > 0
+        def __eq__(self, other):
+            return mycmp(self.obj, other.obj) == 0
+        def __le__(self, other):
+            return mycmp(self.obj, other.obj) <= 0  
+        def __ge__(self, other):
+            return mycmp(self.obj, other.obj) >= 0
+        def __ne__(self, other):
+            return mycmp(self.obj, other.obj) != 0
+    return K
+
+spec_key_func=cmp_to_key(spec_cmp)
+meas_key_func=cmp_to_key(meas_cmp)
 
 def read_LSQ(filepath):
     fin = open(filepath, 'r')
@@ -50,10 +77,12 @@ def read_LSQ(filepath):
         interps_out[i]['er_specimen_name'] = enteries[0]
         if enteries[1] == 'L':
             interps_out[i]['magic_method_codes'] = 'DE-BFL:DA-DIR-GEO'
-        if enteries[1] == 'P':
+        elif enteries[1] == 'P':
             interps_out[i]['magic_method_codes'] = 'DE-BFP:DA-DIR-GEO'
-        if enteries[1] == 'C':
+        elif enteries[1] == 'C':
             interps_out[i]['magic_method_codes'] = 'DE-FM:DA-DIR-GEO'
+        else:
+            interps_out[i]['magic_method_codes'] = ''
         j = 2
         if len(enteries) > 9: interps_out[i]['specimen_comp_name'] = enteries[j]; j += 1;
         else: interps_out[i]['specimen_comp_name'] = None
@@ -76,8 +105,10 @@ def read_LSQ(filepath):
             interps_out[i]['bad_measurement_index'] = []
             for k in range(1,lc-fc):
                 interps_out[i]['bad_measurement_index'].append(fc+k)
-        interps_out[i]['specimen_n'] = enteries[j+1]
-        interps_out[i]['specimen_mad'] = enteries[j+2]
+        try:
+            interps_out[i]['specimen_n'] = enteries[j+1]
+            interps_out[i]['specimen_mad'] = enteries[j+2]
+        except IndexError: pass
     fin.close()
     return interps_out
 
